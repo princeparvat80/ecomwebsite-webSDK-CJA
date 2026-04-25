@@ -7,46 +7,55 @@ const PAGE_MAP = {
   "/cart": { name: "Cart", type: "cart" },
   "/checkout": { name: "Checkout", type: "checkout" },
   "/login": { name: "Login", type: "login" },
-   "/confirmation": { name: "Order Confirmation", type: "order_confirmation" },
+  "/confirmation": { name: "Order Confirmation", type: "order_confirmation" },
 };
 
 const PageTracker = () => {
   const location = useLocation();
 
   useEffect(() => {
+    if (!window.dataLayer) return;
+
     let pageName = "Unknown";
     let pageType = "other";
 
-    //  HANDLE PRODUCT DETAIL PAGE (DYNAMIC ROUTE)
+    // Dynamic product detail route
     if (location.pathname.startsWith("/product/")) {
       pageName = "Product Detail";
       pageType = "product_detail";
-    }
-    //  HANDLE STATIC ROUTES
-    else if (PAGE_MAP[location.pathname]) {
+    } else if (PAGE_MAP[location.pathname]) {
       pageName = PAGE_MAP[location.pathname].name;
       pageType = PAGE_MAP[location.pathname].type;
     }
 
+    const previousPage = window.dataLayer.page?.url || null;
+
+    // Update page context
     window.dataLayer.page = {
       ...window.dataLayer.page,
       name: pageName,
       type: pageType,
       url: location.pathname,
-      previousPage: window.dataLayer.page.url,
-      referrerType: window.dataLayer.page.url ? "internal" : "direct"
+      previousPage,
+      referrerType: previousPage ? "internal" : "direct",
     };
 
+    // Fire page_view event
     window.dataLayer.event = {
       name: "page_view",
       category: "navigation",
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
-    console.log("📘 dataLayer.page updated:", window.dataLayer.page);
+    console.log("📘 page_view fired:", window.dataLayer.page);
+
+    // Trigger Adobe Launch rule
+    if (window._satellite && typeof window._satellite.track === "function") {
+      window._satellite.track("aep_page_view");
+    }
   }, [location.pathname]);
 
-  return null; // IMPORTANT: renders nothing
+  return null;
 };
 
 export default PageTracker;

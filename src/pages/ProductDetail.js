@@ -1,90 +1,253 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
-import { addToCart } from '../redux/cartSlice';
-import axios from 'axios';
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import { updateProductDataLayer } from "../tracking/initDataLayer ";
-import { useSelector } from "react-redux";
-import { pushAddToCartEvent } from "../tracking/initDataLayer ";
+import React, { useState, useEffect } from "react";
+import { useParams, Link } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { addToCart } from "../redux/cartSlice";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { updateProductDataLayer, pushAddToCartEvent } from "../tracking/initDataLayer";
+
+const renderStars = (rating) => {
+  if (!rating) return "☆☆☆☆☆";
+  const full = Math.floor(rating);
+  const half = rating - full >= 0.5;
+  return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(5 - full - (half ? 1 : 0));
+};
 
 const ProductDetail = () => {
-    // const { id } = useParams();
-    const [product, setProduct] = useState(null);
-    const dispatch = useDispatch();
-    const { slug } = useParams();
-    const productId = slug.split("-")[0];
-    const cart = useSelector(state => state.cart);
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [added, setAdded] = useState(false);
 
-useEffect(() => {
-  if (!productId) return;
+  const dispatch = useDispatch();
+  const { slug } = useParams();
+  const productId = slug.split("-")[0];
+  const cart = useSelector((state) => state.cart);
 
-  axios
-    .get(`https://fakestoreapi.com/products/${productId}`)
-    .then((response) => {
-      const data = response.data; // ✅ DEFINE data ONCE
+  useEffect(() => {
+    if (!productId) return;
+    setLoading(true);
 
-      setProduct(data);
+    axios
+      .get(`https://fakestoreapi.com/products/${productId}`)
+      .then((res) => {
+        const data = res.data;
+        setProduct(data);
+        setLoading(false);
 
-      updateProductDataLayer({
-        id: data.id,
-        name: data.title,
-        category: data.category,
-        price: data.price,
-        currency: "USD",
-        rating: data.rating?.rate,
-        description: data.description
+        updateProductDataLayer({
+          id: data.id,
+          name: data.title,
+          category: data.category,
+          price: data.price,
+          currency: "USD",
+          rating: data.rating?.rate,
+          description: data.description,
+        });
+      })
+      .catch((err) => {
+        console.error("Error fetching product:", err);
+        setLoading(false);
       });
-    })
-    .catch((error) =>
-      console.error("Error fetching product:", error)
-    );
-}, [productId]);
+  }, [productId]);
 
+  const handleAddToCart = () => {
+    if (!product) return;
+    dispatch(addToCart(product));
 
-    const handleAddToCart = () => {
-        dispatch(addToCart(product));
+    const existingItem = cart.cartItems.find((ci) => ci.id === product.id);
+    const updatedItems = existingItem
+      ? cart.cartItems.map((ci) =>
+          ci.id === product.id ? { ...ci, quantity: ci.quantity + 1 } : ci
+        )
+      : [...cart.cartItems, { ...product, quantity: 1 }];
 
-        pushAddToCartEvent({
-          product,
-          cart: {
-            items: [...cart.cartItems, { ...product, quantity: 1 }],
-            totalQuantity: cart.totalQuantity + 1,
-            totalAmount: cart.totalAmount + product.price,
-          },
-        });
-        toast.success("🛒 Product added to cart!", {
-            position: "top-right",
-            autoClose: 2000, // Closes after 2 seconds
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: false,
-            draggable: true,
-            progress: undefined,
-        });
-    };
+    pushAddToCartEvent({
+      product,
+      cart: {
+        items: updatedItems,
+        totalQuantity: cart.totalQuantity + 1,
+        totalAmount: cart.totalAmount + product.price,
+      },
+    });
 
-    if (!product) return <p>Loading...</p>;
+    setAdded(true);
+    setTimeout(() => setAdded(false), 2200);
 
+    toast.success("🛒 Added to cart!", {
+      position: "top-right",
+      autoClose: 2000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: true,
+    });
+  };
+
+  if (loading) {
     return (
-        <div className="product-detail-container">
-            <div className="product-detail">
-                <img src={product.image} alt={product.title} className="product-detail-image" />
-                <div className="product-info">
-                    <h1>{product.title}</h1>
-                    <p className="product-description">Category : {product.category}</p>
-                    <p className="product-price">Price: <strong>${product.price}</strong></p>
-                    <p className="product-description">⭐ Rating: {product.rating?.rate} / 5 ({product.rating?.count} reviews)</p>
-                    <p className="product-description">{product.description}</p>
-                    <button onClick={handleAddToCart} className="add-to-cart-button">
-                        Add to Cart
-                    </button>
-                    <Link to="/products" className="back-button">Back to Product</Link>
-                </div>
-            </div>
+      <div className="product-detail-container">
+        <div className="product-detail">
+          <div className="product-detail-image-section">
+            <div
+              className="product-detail-image-wrap"
+              style={{ background: "linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite" }}
+            />
+          </div>
+          <div className="product-info">
+            {[100, 60, 80, 40, 90, 70].map((w, i) => (
+              <div
+                key={i}
+                className="skeleton-line"
+                style={{ width: `${w}%`, height: i === 0 ? "28px" : "16px", marginBottom: "12px" }}
+              />
+            ))}
+          </div>
         </div>
+      </div>
     );
+  }
+
+  if (!product) {
+    return (
+      <div className="product-detail-container">
+        <div style={{ textAlign: "center", padding: "60px 20px" }}>
+          <div style={{ fontSize: "60px", marginBottom: "20px" }}>😕</div>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "24px", color: "var(--navy)" }}>
+            Product not found
+          </h2>
+          <Link to="/products" className="btn btn-primary" style={{ marginTop: "20px", display: "inline-flex" }}>
+            ← Back to Products
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="product-detail-container">
+      <div className="product-detail">
+
+        {/* IMAGE SECTION */}
+        <div className="product-detail-image-section">
+          <div className="product-detail-image-wrap">
+            <img
+              src={product.image}
+              alt={product.title}
+              className="product-detail-image"
+            />
+          </div>
+
+          {/* Trust badges below image */}
+          <div className="trust-badges" style={{ marginTop: "20px" }}>
+            <div className="trust-badge">
+              <span className="trust-badge-icon">🔒</span>
+              <span>Secure Checkout</span>
+            </div>
+            <div className="trust-badge">
+              <span className="trust-badge-icon">🚚</span>
+              <span>Free Shipping</span>
+            </div>
+            <div className="trust-badge">
+              <span className="trust-badge-icon">↩️</span>
+              <span>Easy Returns</span>
+            </div>
+          </div>
+        </div>
+
+        {/* INFO SECTION */}
+        <div className="product-info">
+          {/* Category badge */}
+          <div className="product-info-category">
+            🏷️ {product.category}
+          </div>
+
+          {/* Title */}
+          <h1>{product.title}</h1>
+
+          {/* Rating */}
+          {product.rating && (
+            <div className="product-rating-row">
+              <span style={{ color: "var(--warning)", fontSize: "18px", letterSpacing: "-1px" }}>
+                {renderStars(product.rating.rate)}
+              </span>
+              <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--charcoal)" }}>
+                {product.rating.rate} / 5
+              </span>
+              <span style={{ fontSize: "13px", color: "var(--muted)" }}>
+                ({product.rating.count} reviews)
+              </span>
+            </div>
+          )}
+
+          {/* Price */}
+          <div>
+            <span className="product-price">
+              <span className="currency">$</span>
+              {product.price}
+            </span>
+            <span
+              style={{
+                marginLeft: "10px",
+                fontSize: "12px",
+                background: "rgba(16,185,129,0.1)",
+                color: "var(--success)",
+                padding: "3px 10px",
+                borderRadius: "var(--radius-full)",
+                fontWeight: "700",
+              }}
+            >
+              In Stock
+            </span>
+          </div>
+
+          {/* Description */}
+          <p className="product-description">{product.description}</p>
+
+          {/* Action row */}
+          <div className="product-action-row">
+            <button
+              onClick={handleAddToCart}
+              className="add-to-cart-button"
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                padding: "14px 20px",
+                fontSize: "15px",
+                borderRadius: "var(--radius-md)",
+                background: added ? "var(--success)" : undefined,
+                transition: "all 0.25s ease",
+              }}
+            >
+              {added ? "✓ Added!" : "🛒 Add to Cart"}
+            </button>
+
+            <Link to="/products" className="back-button">
+              ← Back
+            </Link>
+          </div>
+
+          {/* AEP tracking note */}
+          <div
+            style={{
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              padding: "14px 16px",
+              fontSize: "12.5px",
+              color: "var(--muted)",
+              lineHeight: "1.6",
+            }}
+          >
+            <strong style={{ color: "var(--charcoal)" }}>📡 AEP Tracking:</strong>&nbsp;
+            <code style={{ fontSize: "11px" }}>view_item</code> event fired on load ·&nbsp;
+            <code style={{ fontSize: "11px" }}>add_to_cart</code> fires on button click ·&nbsp;
+            Product ID: <code style={{ fontSize: "11px" }}>{product.id}</code>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
 };
 
 export default ProductDetail;
