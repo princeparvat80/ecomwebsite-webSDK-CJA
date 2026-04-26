@@ -1,0 +1,3 @@
+/*    /index.html   200
+
+<!-- This means: every URL (/*) → serve index.html → with HTTP 200 (not 404). React Router then reads the URL and renders the correct page. -->
