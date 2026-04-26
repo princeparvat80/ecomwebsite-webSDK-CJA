@@ -28,13 +28,27 @@ const Home = () => {
       .catch(() => {});
   }, []);
 
-  // Exit-intent trigger (mouse leaves viewport top)
+  // Exit-intent trigger
+  // Rules:
+  //   1. User must have been on page for at least 10 seconds
+  //   2. Only fires ONCE per browser session (sessionStorage flag)
+  //   3. Mouse must move above top edge of viewport (clientY <= 0)
   useEffect(() => {
+    // If already shown this session, do not attach listener at all
+    if (sessionStorage.getItem("exit_intent_shown")) return;
+
+    const pageEntryTime = Date.now();
+    const MIN_TIME_ON_PAGE_MS = 10000; // 10 seconds
+
     const handleMouseLeave = (e) => {
       if (e.clientY <= 0 && !exitFired.current) {
+        const timeOnPage = Date.now() - pageEntryTime;
+        if (timeOnPage < MIN_TIME_ON_PAGE_MS) return; // Too soon — ignore
+
         exitFired.current = true;
+        sessionStorage.setItem("exit_intent_shown", "true"); // Never show again this session
         setExitOverlayOpen(true);
-        // Signal for AJO / Launch
+
         if (window.dataLayer) {
           window.dataLayer.event = {
             name: "exit_intent",
@@ -47,6 +61,7 @@ const Home = () => {
         }
       }
     };
+
     document.addEventListener("mouseleave", handleMouseLeave);
     return () => document.removeEventListener("mouseleave", handleMouseLeave);
   }, []);
