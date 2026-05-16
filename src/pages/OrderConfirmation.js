@@ -1,41 +1,35 @@
-import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import React, { useState }            from "react";
+import { Link, useLocation }          from "react-router-dom";
+import { pushFeedbackSubmittedEvent } from "../tracking/initDataLayer";
 
 const OrderConfirmation = () => {
-  const [feedback, setFeedback] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [rating, setRating] = useState(0);
+  const [feedback,    setFeedback]    = useState("");
+  const [submitted,   setSubmitted]   = useState(false);
+  const [rating,      setRating]      = useState(0);
   const [hoveredStar, setHoveredStar] = useState(0);
 
   const location = useLocation();
-  const orderId = location.state?.orderId || `ORDER-${Date.now()}`;
-  const total = location.state?.total;
+  const orderId  = location.state?.orderId || `ORDER-${Date.now()}`;
+  const total    = location.state?.total;
 
   const handleSubmit = () => {
-    if (feedback.trim() === "") {
-      return;
-    }
-    sessionStorage.setItem("userFeedback", feedback);
+    if (!feedback.trim()) return;
+
+    /* Persist locally for session reference */
+    sessionStorage.setItem("userFeedback",   feedback);
     sessionStorage.setItem("feedbackRating", rating);
 
-    // Fire feedback event to AEP data layer
-    if (window.dataLayer) {
-      window.dataLayer.event = {
-        name: "feedback_submitted",
-        category: "ui",
-        timestamp: Date.now(),
-      };
-      window.dataLayer.ui = {
-        ...window.dataLayer.ui,
-        interactionType: "submit",
-        ctaLabel: "Submit Feedback",
-        ctaLocation: "order_confirmation",
-      };
-      console.log("📝 feedback_submitted event fired:", window.dataLayer);
-      if (window._satellite?.track) {
-        window._satellite.track("aep_feedback_submitted");
-      }
-    }
+    /*
+      pushFeedbackSubmittedEvent receives rating (1–5) and
+      feedbackLength (character count). Both land in
+      _princeparvat.feedback in the ACDL push for CJA analysis:
+      correlate satisfaction scores with purchase value,
+      product category, or UTM acquisition source.
+    */
+    pushFeedbackSubmittedEvent({
+      rating,
+      feedbackLength: feedback.trim().length,
+    });
 
     setSubmitted(true);
   };
@@ -60,7 +54,7 @@ const OrderConfirmation = () => {
           <span
             style={{
               marginLeft: "12px",
-              color: "var(--accent)",
+              color:      "var(--accent)",
               fontFamily: "var(--font-display)",
             }}
           >
@@ -72,21 +66,21 @@ const OrderConfirmation = () => {
       {/* NEXT STEPS */}
       <div
         style={{
-          background: "white",
-          border: "1px solid var(--border)",
+          background:   "white",
+          border:       "1px solid var(--border)",
           borderRadius: "var(--radius-xl)",
-          padding: "24px",
+          padding:      "24px",
           marginBottom: "24px",
-          textAlign: "left",
-          boxShadow: "var(--shadow-sm)",
+          textAlign:    "left",
+          boxShadow:    "var(--shadow-sm)",
         }}
       >
         <h3
           style={{
-            fontFamily: "var(--font-display)",
-            fontSize: "16px",
-            fontWeight: "700",
-            color: "var(--navy)",
+            fontFamily:   "var(--font-display)",
+            fontSize:     "16px",
+            fontWeight:   "700",
+            color:        "var(--navy)",
             marginBottom: "16px",
           }}
         >
@@ -95,30 +89,30 @@ const OrderConfirmation = () => {
 
         {[
           { icon: "📧", title: "Confirmation", desc: "Order confirmation email sent (simulated)" },
-          { icon: "📦", title: "Processing", desc: "Your order is being prepared" },
-          { icon: "🚚", title: "Shipping", desc: "Estimated delivery in 3–5 business days" },
+          { icon: "📦", title: "Processing",   desc: "Your order is being prepared"              },
+          { icon: "🚚", title: "Shipping",      desc: "Estimated delivery in 3–5 business days"  },
         ].map((step, i) => (
           <div
             key={i}
             style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "14px",
-              padding: "12px 0",
+              display:      "flex",
+              alignItems:   "flex-start",
+              gap:          "14px",
+              padding:      "12px 0",
               borderBottom: i < 2 ? "1px solid var(--border)" : "none",
             }}
           >
             <div
               style={{
-                width: "36px",
-                height: "36px",
-                background: "var(--accent-light)",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
+                width:          "36px",
+                height:         "36px",
+                background:     "var(--accent-light)",
+                borderRadius:   "50%",
+                display:        "flex",
+                alignItems:     "center",
                 justifyContent: "center",
-                fontSize: "18px",
-                flexShrink: 0,
+                fontSize:       "18px",
+                flexShrink:     0,
               }}
             >
               {step.icon}
@@ -126,9 +120,9 @@ const OrderConfirmation = () => {
             <div>
               <div
                 style={{
-                  fontSize: "14px",
-                  fontWeight: "700",
-                  color: "var(--charcoal)",
+                  fontSize:     "14px",
+                  fontWeight:   "700",
+                  color:        "var(--charcoal)",
                   marginBottom: "2px",
                 }}
               >
@@ -154,12 +148,12 @@ const OrderConfirmation = () => {
           </div>
         ) : (
           <>
-            {/* Star Rating */}
+            {/* Star rating */}
             <div
               style={{
-                display: "flex",
-                gap: "6px",
-                marginBottom: "16px",
+                display:        "flex",
+                gap:            "6px",
+                marginBottom:   "16px",
                 justifyContent: "flex-start",
               }}
             >
@@ -170,21 +164,19 @@ const OrderConfirmation = () => {
                   onMouseEnter={() => setHoveredStar(star)}
                   onMouseLeave={() => setHoveredStar(0)}
                   style={{
-                    fontSize: "28px",
+                    fontSize:   "28px",
                     background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color:
-                      star <= (hoveredStar || rating)
-                        ? "var(--warning)"
-                        : "var(--border-strong)",
+                    border:     "none",
+                    cursor:     "pointer",
+                    color:      star <= (hoveredStar || rating)
+                      ? "var(--warning)"
+                      : "var(--border-strong)",
                     transition: "all 0.15s ease",
-                    transform:
-                      star <= (hoveredStar || rating)
-                        ? "scale(1.15)"
-                        : "scale(1)",
+                    transform:  star <= (hoveredStar || rating)
+                      ? "scale(1.15)"
+                      : "scale(1)",
                     lineHeight: 1,
-                    padding: "2px",
+                    padding:    "2px",
                   }}
                   aria-label={`Rate ${star} star${star !== 1 ? "s" : ""}`}
                 >
@@ -194,10 +186,10 @@ const OrderConfirmation = () => {
               {rating > 0 && (
                 <span
                   style={{
-                    fontSize: "13px",
-                    color: "var(--muted)",
+                    fontSize:  "13px",
+                    color:     "var(--muted)",
                     alignSelf: "center",
-                    marginLeft: "8px",
+                    marginLeft:"8px",
                   }}
                 >
                   {["", "Poor", "Fair", "Good", "Great", "Excellent!"][rating]}
@@ -215,10 +207,10 @@ const OrderConfirmation = () => {
 
             <div
               style={{
-                display: "flex",
+                display:        "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
-                marginTop: "8px",
+                alignItems:     "center",
+                marginTop:      "8px",
               }}
             >
               <span style={{ fontSize: "12px", color: "var(--muted)" }}>
@@ -230,7 +222,7 @@ const OrderConfirmation = () => {
                 disabled={!feedback.trim()}
                 style={{
                   opacity: feedback.trim() ? 1 : 0.5,
-                  cursor: feedback.trim() ? "pointer" : "not-allowed",
+                  cursor:  feedback.trim() ? "pointer" : "not-allowed",
                 }}
               >
                 Submit Feedback ✓
@@ -243,24 +235,25 @@ const OrderConfirmation = () => {
       {/* AEP TRACKING NOTE */}
       <div
         style={{
-          background: "var(--bg)",
-          border: "1px solid var(--border)",
+          background:   "var(--bg)",
+          border:       "1px solid var(--border)",
           borderRadius: "var(--radius-md)",
-          padding: "14px 18px",
-          fontSize: "12.5px",
-          color: "var(--muted)",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
+          padding:      "14px 18px",
+          fontSize:     "12.5px",
+          color:        "var(--muted)",
+          display:      "flex",
+          alignItems:   "center",
+          gap:          "8px",
           marginBottom: "28px",
-          textAlign: "left",
+          textAlign:    "left",
         }}
       >
         <span>📡</span>
         <span>
-          <strong style={{ color: "var(--charcoal)" }}>AEP events on this page:</strong>&nbsp;
-          <code style={{ fontSize: "11px" }}>purchase</code> (fired at checkout) ·&nbsp;
-          <code style={{ fontSize: "11px" }}>feedback_submitted</code> (fires on submit)
+          <strong style={{ color: "var(--charcoal)" }}>ACDL events on this page:</strong>&nbsp;
+          <code style={{ fontSize: "11px" }}>purchase</code> pushed at checkout ·&nbsp;
+          <code style={{ fontSize: "11px" }}>feedback_submitted</code> pushed on submit
+          with <code style={{ fontSize: "11px" }}>_princeparvat.feedback.rating</code>
         </span>
       </div>
 
@@ -273,6 +266,7 @@ const OrderConfirmation = () => {
           Go to Home
         </Link>
       </div>
+
     </div>
   );
 };

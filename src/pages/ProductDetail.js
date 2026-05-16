@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import { addToCart } from "../redux/cartSlice";
-import axios from "axios";
-import { toast } from "react-toastify";
-import { updateProductDataLayer, pushAddToCartEvent } from "../tracking/initDataLayer";
+import React, { useState, useEffect }          from "react";
+import { useParams, Link }                      from "react-router-dom";
+import { useDispatch, useSelector }             from "react-redux";
+import { addToCart }                            from "../redux/cartSlice";
+import axios                                    from "axios";
+import { toast }                                from "react-toastify";
+import { pushViewItemEvent, pushAddToCartEvent } from "../tracking/initDataLayer";
 
 const renderStars = (rating) => {
   if (!rating) return "☆☆☆☆☆";
@@ -16,12 +16,12 @@ const renderStars = (rating) => {
 const ProductDetail = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [added, setAdded] = useState(false);
+  const [added,   setAdded]   = useState(false);
 
-  const dispatch = useDispatch();
-  const { slug } = useParams();
-  const productId = slug.split("-")[0];
-  const cart = useSelector((state) => state.cart);
+  const dispatch   = useDispatch();
+  const { slug }   = useParams();
+  const productId  = slug.split("-")[0];
+  const cart       = useSelector((state) => state.cart);
 
   useEffect(() => {
     if (!productId) return;
@@ -34,14 +34,20 @@ const ProductDetail = () => {
         setProduct(data);
         setLoading(false);
 
-        updateProductDataLayer({
-          id: data.id,
-          name: data.title,
-          category: data.category,
-          price: data.price,
-          currency: "USD",
-          rating: data.rating?.rate,
-          description: data.description,
+        /*
+          pushViewItemEvent replaces the old updateProductDataLayer call.
+          Passes the product exactly as the API returns it — pushViewItemEvent
+          reads rating directly from data.rating.rate internally via
+          the _princeparvat.rating field in productListItems.
+        */
+        pushViewItemEvent({
+          id:          data.id,
+          name:        data.title,
+          category:    data.category,
+          price:       data.price,
+          currency:    "USD",
+          rating:      data.rating?.rate  || null,
+          description: data.description   || null,
         });
       })
       .catch((err) => {
@@ -52,8 +58,14 @@ const ProductDetail = () => {
 
   const handleAddToCart = () => {
     if (!product) return;
-    dispatch(addToCart(product));
 
+    /*
+      Build updatedItems BEFORE dispatching to Redux — same pattern
+      as Product.js. Redux hasn't processed the dispatch yet so the
+      selector still returns the pre-add state at this point.
+      Pass only items array — buildCartData() in initDataLayer.js
+      computes all totals from the items.
+    */
     const existingItem = cart.cartItems.find((ci) => ci.id === product.id);
     const updatedItems = existingItem
       ? cart.cartItems.map((ci) =>
@@ -61,28 +73,27 @@ const ProductDetail = () => {
         )
       : [...cart.cartItems, { ...product, quantity: 1 }];
 
+    dispatch(addToCart(product));
+
     pushAddToCartEvent({
       product,
-      cart: {
-        items: updatedItems,
-        totalQuantity: cart.totalQuantity + 1,
-        totalAmount: cart.totalAmount + product.price,
-      },
+      cart: { items: updatedItems },
     });
 
     setAdded(true);
     setTimeout(() => setAdded(false), 2200);
 
     toast.success("🛒 Added to cart!", {
-      position: "top-right",
-      autoClose: 2000,
+      position:        "top-right",
+      autoClose:       2000,
       hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: false,
-      draggable: true,
+      closeOnClick:    true,
+      pauseOnHover:    false,
+      draggable:       true,
     });
   };
 
+  /* ── Loading skeleton ── */
   if (loading) {
     return (
       <div className="product-detail-container">
@@ -90,7 +101,11 @@ const ProductDetail = () => {
           <div className="product-detail-image-section">
             <div
               className="product-detail-image-wrap"
-              style={{ background: "linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite" }}
+              style={{
+                background:     "linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)",
+                backgroundSize: "200% 100%",
+                animation:      "shimmer 1.5s infinite",
+              }}
             />
           </div>
           <div className="product-info">
@@ -107,6 +122,7 @@ const ProductDetail = () => {
     );
   }
 
+  /* ── Product not found ── */
   if (!product) {
     return (
       <div className="product-detail-container">
@@ -115,7 +131,11 @@ const ProductDetail = () => {
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "24px", color: "var(--navy)" }}>
             Product not found
           </h2>
-          <Link to="/products" className="btn btn-primary" style={{ marginTop: "20px", display: "inline-flex" }}>
+          <Link
+            to="/products"
+            className="btn btn-primary"
+            style={{ marginTop: "20px", display: "inline-flex" }}
+          >
             ← Back to Products
           </Link>
         </div>
@@ -123,6 +143,7 @@ const ProductDetail = () => {
     );
   }
 
+  /* ── Product detail view ── */
   return (
     <div className="product-detail-container">
       <div className="product-detail">
@@ -137,7 +158,6 @@ const ProductDetail = () => {
             />
           </div>
 
-          {/* Trust badges below image */}
           <div className="trust-badges" style={{ marginTop: "20px" }}>
             <div className="trust-badge">
               <span className="trust-badge-icon">🔒</span>
@@ -156,15 +176,13 @@ const ProductDetail = () => {
 
         {/* INFO SECTION */}
         <div className="product-info">
-          {/* Category badge */}
+
           <div className="product-info-category">
             🏷️ {product.category}
           </div>
 
-          {/* Title */}
           <h1>{product.title}</h1>
 
-          {/* Rating */}
           {product.rating && (
             <div className="product-rating-row">
               <span style={{ color: "var(--warning)", fontSize: "18px", letterSpacing: "-1px" }}>
@@ -179,7 +197,6 @@ const ProductDetail = () => {
             </div>
           )}
 
-          {/* Price */}
           <div>
             <span className="product-price">
               <span className="currency">$</span>
@@ -187,35 +204,33 @@ const ProductDetail = () => {
             </span>
             <span
               style={{
-                marginLeft: "10px",
-                fontSize: "12px",
-                background: "rgba(16,185,129,0.1)",
-                color: "var(--success)",
-                padding: "3px 10px",
+                marginLeft:   "10px",
+                fontSize:     "12px",
+                background:   "rgba(16,185,129,0.1)",
+                color:        "var(--success)",
+                padding:      "3px 10px",
                 borderRadius: "var(--radius-full)",
-                fontWeight: "700",
+                fontWeight:   "700",
               }}
             >
               In Stock
             </span>
           </div>
 
-          {/* Description */}
           <p className="product-description">{product.description}</p>
 
-          {/* Action row */}
           <div className="product-action-row">
             <button
               onClick={handleAddToCart}
               className="add-to-cart-button"
               style={{
-                flex: 1,
-                justifyContent: "center",
-                padding: "14px 20px",
-                fontSize: "15px",
-                borderRadius: "var(--radius-md)",
-                background: added ? "var(--success)" : undefined,
-                transition: "all 0.25s ease",
+                flex:          1,
+                justifyContent:"center",
+                padding:       "14px 20px",
+                fontSize:      "15px",
+                borderRadius:  "var(--radius-md)",
+                background:    added ? "var(--success)" : undefined,
+                transition:    "all 0.25s ease",
               }}
             >
               {added ? "✓ Added!" : "🛒 Add to Cart"}
@@ -229,22 +244,22 @@ const ProductDetail = () => {
           {/* AEP tracking note */}
           <div
             style={{
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
+              background:   "var(--bg)",
+              border:       "1px solid var(--border)",
               borderRadius: "var(--radius-md)",
-              padding: "14px 16px",
-              fontSize: "12.5px",
-              color: "var(--muted)",
-              lineHeight: "1.6",
+              padding:      "14px 16px",
+              fontSize:     "12.5px",
+              color:        "var(--muted)",
+              lineHeight:   "1.6",
             }}
           >
             <strong style={{ color: "var(--charcoal)" }}>📡 AEP Tracking:</strong>&nbsp;
-            <code style={{ fontSize: "11px" }}>view_item</code> event fired on load ·&nbsp;
-            <code style={{ fontSize: "11px" }}>add_to_cart</code> fires on button click ·&nbsp;
-            Product ID: <code style={{ fontSize: "11px" }}>{product.id}</code>
+            <code style={{ fontSize: "11px" }}>view_item</code> pushed on load ·&nbsp;
+            <code style={{ fontSize: "11px" }}>add_to_cart</code> pushed on button click ·&nbsp;
+            SKU: <code style={{ fontSize: "11px" }}>{product.id}</code>
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   );

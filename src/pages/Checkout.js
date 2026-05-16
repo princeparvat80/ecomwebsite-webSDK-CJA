@@ -1,59 +1,76 @@
-import React, { useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux";
-import { useNavigate, Link } from "react-router-dom";
-import { clearCart } from "../redux/cartSlice";
-import { useAuth } from "../auth/AuthContext";
+import React, { useEffect }          from "react";
+import { useSelector, useDispatch }  from "react-redux";
+import { useNavigate, Link }         from "react-router-dom";
+import { clearCart }                 from "../redux/cartSlice";
+import { useAuth }                   from "../auth/AuthContext";
 import {
   pushBeginCheckoutEvent,
   pushPurchaseEvent,
-} from "../tracking/initDataLayer";
+}                                    from "../tracking/initDataLayer";
 
 const Checkout = () => {
-  const { auth } = useAuth();
-  const cartItems = useSelector((state) => state.cart.cartItems);
-  const cart = useSelector((state) => state.cart);
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
+  const { auth }   = useAuth();
+  const cartItems  = useSelector((state) => state.cart.cartItems);
+  const cart       = useSelector((state) => state.cart);
+  const navigate   = useNavigate();
+  const dispatch   = useDispatch();
 
-  // Hard auth guard
+  /* Hard auth guard — redirect unauthenticated users to login */
   useEffect(() => {
     if (!auth.isAuthenticated) {
       navigate("/login", { state: { from: "/checkout" } });
     }
   }, [auth, navigate]);
 
-  // Fire begin_checkout once on load (after auth confirmed)
+  /*
+    Fire begin_checkout once on mount, after auth is confirmed.
+    pushBeginCheckoutEvent passes the full Redux cart object —
+    buildCartData() inside initDataLayer computes all totals.
+  */
   useEffect(() => {
     if (auth.isAuthenticated) {
       pushBeginCheckoutEvent(cart);
     }
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.isAuthenticated]);
 
-  // Compute totals safely
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  /* UI totals — display only, not passed to tracking */
+  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalQty = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const shipping = subtotal > 50 ? 0 : 4.99;
-  const total = subtotal + shipping;
+  const total    = subtotal + shipping;
 
   const handlePayment = () => {
-    const orderId = `ORDER-${Date.now()}`;
+    /*
+      orderId uses crypto.randomUUID() — produces a proper RFC 4122
+      UUID (e.g. "550e8400-e29b-41d4-a716-446655440000").
+      This is important for AEP deduplication: if the same event
+      is accidentally ingested twice, AEP uses purchaseID to
+      deduplicate at the dataset level. Date.now() risks collisions
+      if two purchases happen within the same millisecond.
+      Falls back to Date.now() string if crypto API is unavailable.
+    */
+    const orderId = typeof crypto?.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `ORDER-${Date.now()}`;
 
-    // Fire purchase BEFORE clearing cart
+    /*
+      ⚠️  pushPurchaseEvent MUST fire BEFORE dispatch(clearCart()).
+      Once clearCart() runs, cart.cartItems is empty and we cannot
+      reconstruct what was purchased for the productListItems array.
+    */
     pushPurchaseEvent({ cart, orderId });
 
     dispatch(clearCart());
     navigate("/confirmation", { state: { orderId, total } });
   };
 
-  // Prevent flicker while auth redirect happens
+  /* Prevent render flicker while auth redirect is in progress */
   if (!auth.isAuthenticated) return null;
 
   return (
     <div className="checkout-container">
+
       {/* HEADER */}
       <h1 className="checkout-title">Checkout</h1>
       <p className="checkout-subtitle">
@@ -66,7 +83,11 @@ const Checkout = () => {
           <h3 style={{ fontFamily: "var(--font-display)", color: "var(--navy)", marginBottom: "10px" }}>
             Your cart is empty
           </h3>
-          <Link to="/products" className="btn btn-primary" style={{ marginTop: "12px", display: "inline-flex" }}>
+          <Link
+            to="/products"
+            className="btn btn-primary"
+            style={{ marginTop: "12px", display: "inline-flex" }}
+          >
             Browse Products →
           </Link>
         </div>
@@ -79,9 +100,9 @@ const Checkout = () => {
               <span
                 style={{
                   marginLeft: "auto",
-                  fontSize: "13px",
+                  fontSize:   "13px",
                   fontWeight: "500",
-                  color: "var(--muted)",
+                  color:      "var(--muted)",
                   fontFamily: "var(--font-body)",
                 }}
               >
@@ -108,12 +129,12 @@ const Checkout = () => {
             <div style={{ marginTop: "16px" }}>
               <div
                 style={{
-                  display: "flex",
+                  display:        "flex",
                   justifyContent: "space-between",
-                  fontSize: "13.5px",
-                  color: "var(--slate)",
-                  padding: "8px 0",
-                  borderTop: "1px solid var(--border)",
+                  fontSize:       "13.5px",
+                  color:          "var(--slate)",
+                  padding:        "8px 0",
+                  borderTop:      "1px solid var(--border)",
                 }}
               >
                 <span>Subtotal</span>
@@ -122,12 +143,12 @@ const Checkout = () => {
 
               <div
                 style={{
-                  display: "flex",
+                  display:        "flex",
                   justifyContent: "space-between",
-                  fontSize: "13.5px",
-                  color: "var(--slate)",
-                  padding: "8px 0",
-                  borderBottom: "1px solid var(--border)",
+                  fontSize:       "13.5px",
+                  color:          "var(--slate)",
+                  padding:        "8px 0",
+                  borderBottom:   "1px solid var(--border)",
                 }}
               >
                 <span>Shipping</span>
@@ -153,23 +174,27 @@ const Checkout = () => {
 
             <div
               style={{
-                background: "var(--bg)",
-                border: "1.5px dashed var(--border-strong)",
-                borderRadius: "var(--radius-md)",
-                padding: "24px",
-                textAlign: "center",
-                marginBottom: "20px",
+                background:    "var(--bg)",
+                border:        "1.5px dashed var(--border-strong)",
+                borderRadius:  "var(--radius-md)",
+                padding:       "24px",
+                textAlign:     "center",
+                marginBottom:  "20px",
               }}
             >
               <p style={{ fontSize: "14px", color: "var(--muted)", marginBottom: "6px" }}>
                 Demo Mode — No real payment required
               </p>
               <p style={{ fontSize: "13px", color: "var(--muted)" }}>
-                Clicking "Place Order" will fire a{" "}
+                Clicking "Place Order" pushes a{" "}
                 <code style={{ fontSize: "12px", background: "rgba(255,107,53,0.1)", padding: "2px 6px", borderRadius: "4px" }}>
                   purchase
                 </code>{" "}
-                event to the AEP data layer.
+                event to{" "}
+                <code style={{ fontSize: "12px", background: "rgba(255,107,53,0.1)", padding: "2px 6px", borderRadius: "4px" }}>
+                  window.adobeDataLayer
+                </code>
+                .
               </p>
             </div>
 
@@ -190,22 +215,22 @@ const Checkout = () => {
           {/* AEP TRACKING NOTE */}
           <div
             style={{
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
+              background:   "var(--bg)",
+              border:       "1px solid var(--border)",
               borderRadius: "var(--radius-md)",
-              padding: "14px 18px",
-              fontSize: "12.5px",
-              color: "var(--muted)",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
+              padding:      "14px 18px",
+              fontSize:     "12.5px",
+              color:        "var(--muted)",
+              display:      "flex",
+              alignItems:   "center",
+              gap:          "8px",
             }}
           >
             <span>📡</span>
             <span>
-              <strong style={{ color: "var(--charcoal)" }}>AEP events:</strong>&nbsp;
-              <code style={{ fontSize: "11px" }}>begin_checkout</code> fired on load ·&nbsp;
-              <code style={{ fontSize: "11px" }}>purchase</code> fires on "Place Order"
+              <strong style={{ color: "var(--charcoal)" }}>ACDL events:</strong>&nbsp;
+              <code style={{ fontSize: "11px" }}>begin_checkout</code> pushed on load ·&nbsp;
+              <code style={{ fontSize: "11px" }}>purchase</code> pushed on "Place Order" with UUID orderId
             </span>
           </div>
         </>

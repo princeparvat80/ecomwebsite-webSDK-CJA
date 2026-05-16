@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import { addToCart } from "../redux/cartSlice";
-import axios from "axios";
-import { toast } from "react-toastify";
-import { slugify } from "../utils/slugify";
-import { pushAddToCartEvent } from "../tracking/initDataLayer";
+import React, { useState, useEffect }    from "react";
+import { Link }                           from "react-router-dom";
+import { useDispatch, useSelector }       from "react-redux";
+import { addToCart }                      from "../redux/cartSlice";
+import axios                              from "axios";
+import { toast }                          from "react-toastify";
+import { slugify }                        from "../utils/slugify";
+import { pushAddToCartEvent }             from "../tracking/initDataLayer";
 
 const CATEGORIES = ["All", "electronics", "jewelery", "men's clothing", "women's clothing"];
 
@@ -19,7 +19,7 @@ const SkeletonCard = () => (
   <div className="skeleton-card">
     <div className="skeleton-img" style={{ height: "220px" }} />
     <div className="skeleton-body">
-      <div className="skeleton-line short" style={{ marginBottom: "8px" }} />
+      <div className="skeleton-line short"  style={{ marginBottom: "8px" }} />
       <div className="skeleton-line medium" style={{ marginBottom: "8px" }} />
       <div className="skeleton-line" style={{ width: "40%", height: "18px" }} />
     </div>
@@ -27,11 +27,12 @@ const SkeletonCard = () => (
 );
 
 const Product = () => {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [products,        setProducts]        = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [activeCategory,  setActiveCategory]  = useState("All");
+
   const dispatch = useDispatch();
-  const cart = useSelector((state) => state.cart);
+  const cart     = useSelector((state) => state.cart);
 
   useEffect(() => {
     axios
@@ -52,8 +53,20 @@ const Product = () => {
       : products.filter((p) => p.category === activeCategory);
 
   const handleAddToCart = (product) => {
-    dispatch(addToCart(product));
+    /*
+      Compute the updated cart items array BEFORE dispatching to Redux.
+      We need the post-add state to pass to pushAddToCartEvent so that
+      productListItems in the ACDL push reflects the cart AFTER the add.
 
+      We do this manually here because Redux hasn't processed the dispatch
+      yet at the point we call pushAddToCartEvent — the selector still
+      returns the pre-add state.
+
+      buildCartData() inside pushAddToCartEvent receives this items array
+      and computes totalQuantity and totalValue itself — we do NOT pass
+      pre-computed totals. This keeps the normalizer as the single source
+      of truth for all cart math in the tracking layer.
+    */
     const existingItem = cart.cartItems.find((ci) => ci.id === product.id);
     const updatedItems = existingItem
       ? cart.cartItems.map((ci) =>
@@ -61,38 +74,38 @@ const Product = () => {
         )
       : [...cart.cartItems, { ...product, quantity: 1 }];
 
+    dispatch(addToCart(product));
+
     pushAddToCartEvent({
       product,
-      cart: {
-        items: updatedItems,
-        totalQuantity: cart.totalQuantity + 1,
-        totalAmount: cart.totalAmount + product.price,
-      },
+      cart: { items: updatedItems },
     });
 
-    toast.success(`🛒 Added to cart!`, {
-      position: "top-right",
-      autoClose: 2000,
+    toast.success("🛒 Added to cart!", {
+      position:        "top-right",
+      autoClose:       2000,
       hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: false,
-      draggable: true,
+      closeOnClick:    true,
+      pauseOnHover:    false,
+      draggable:       true,
     });
   };
 
   return (
     <div className="product-container">
+
       {/* PAGE HEADER */}
       <div className="page-header">
         <div className="page-header-inner">
           <div className="page-eyebrow">🛍️ Catalog</div>
           <h1 className="page-title">Our Products</h1>
-          <p className="page-subtitle">Explore our curated collection — every action is tracked via AEP</p>
+          <p className="page-subtitle">
+            Explore our curated collection — every action is tracked via AEP
+          </p>
         </div>
       </div>
 
-      {/* ── AJO ZONE: PRODUCTS PROMO STRIP ──────────────────────────────── */}
-      {/* id="ajo-products-promo" — AJO activates via adding class ajo-active */}
+      {/* ── AJO ZONE: PRODUCTS PROMO STRIP ── */}
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "20px 60px 0" }}>
         <div
           id="ajo-products-promo"
@@ -101,8 +114,11 @@ const Product = () => {
         >
           <span style={{ fontSize: "20px" }}>🎁</span>
           <span>
-            <strong>AJO Promo Zone</strong> — This strip is reserved for targeted promotions from Adobe Journey Optimizer.
-            &nbsp;<code style={{ fontSize: "11px", background: "rgba(255,107,53,0.1)", padding: "2px 6px", borderRadius: "4px" }}>data-ajo-zone="products_promo_strip"</code>
+            <strong>AJO Promo Zone</strong> — Reserved for targeted promotions
+            from Adobe Journey Optimizer.&nbsp;
+            <code style={{ fontSize: "11px", background: "rgba(255,107,53,0.1)", padding: "2px 6px", borderRadius: "4px" }}>
+              data-ajo-zone="products_promo_strip"
+            </code>
           </span>
         </div>
       </div>
@@ -127,7 +143,7 @@ const Product = () => {
         </div>
       </div>
 
-      {/* GRID */}
+      {/* PRODUCT GRID */}
       <div className="products-grid">
         {loading
           ? Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
@@ -185,9 +201,11 @@ const Product = () => {
                     </Link>
                   </div>
                 </div>
+
               </div>
             ))}
       </div>
+
     </div>
   );
 };

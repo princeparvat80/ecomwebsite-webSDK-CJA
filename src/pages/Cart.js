@@ -1,44 +1,46 @@
-import React, { useEffect, useState } from "react";
-import { useSelector, useDispatch } from "react-redux";
+import React, { useEffect, useState }  from "react";
+import { useSelector, useDispatch }     from "react-redux";
 import {
   removeFromCart,
   increaseQuantity,
   decreaseQuantity,
-} from "../redux/cartSlice";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+}                                        from "../redux/cartSlice";
+import { Link, useNavigate }            from "react-router-dom";
+import { useAuth }                      from "../auth/AuthContext";
 import {
   pushCheckoutClickEvent,
   pushViewCartEvent,
   pushAddToCartEvent,
   pushRemoveFromCartEvent,
-} from "../tracking/initDataLayer";
+}                                        from "../tracking/initDataLayer";
 
 const Cart = () => {
-  const cart = useSelector((state) => state.cart);
+  const cart      = useSelector((state) => state.cart);
   const cartItems = cart.cartItems;
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const { auth } = useAuth();
-  const [promoCode, setPromoCode] = useState("");
+  const dispatch  = useDispatch();
+  const navigate  = useNavigate();
+  const { auth }  = useAuth();
+
+  const [promoCode,    setPromoCode]    = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
 
-  // Compute totals from items (since store may not have derived state)
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  /* UI totals — used only for display, not passed to tracking */
+  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalQty = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const shipping = subtotal > 50 ? 0 : 4.99;
   const discount = promoApplied ? subtotal * 0.1 : 0;
-  const total = subtotal - discount + shipping;
+  const total    = subtotal - discount + shipping;
 
-  // Fire view_cart once on load
+  /*
+    Fire view_cart once on mount when cart has items.
+    Passes the full Redux cart object — pushViewCartEvent reads
+    cart.cartItems internally and runs it through buildCartData().
+  */
   useEffect(() => {
     if (cartItems.length > 0) {
       pushViewCartEvent(cart);
     }
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCheckout = (e) => {
@@ -51,50 +53,59 @@ const Cart = () => {
     navigate("/checkout");
   };
 
+  /*
+    handleDecrease — quantity goes down by 1, or item is removed if qty reaches 0.
+    Build the post-action items array first, then dispatch, then push.
+    If newQty === 0 the item is filtered out — matching what decreaseQuantity
+    does in cartSlice (removes the item when qty would go below 1).
+  */
   const handleDecrease = (item) => {
+    const newQty      = item.quantity - 1;
+    const updatedItems = cartItems
+      .map((ci) => ci.id === item.id ? { ...ci, quantity: newQty } : ci)
+      .filter((ci) => ci.quantity > 0);
+
     dispatch(decreaseQuantity(item.id));
-    const newQty = item.quantity - 1;
+
     pushRemoveFromCartEvent({
       product: item,
-      cart: {
-        items: cartItems
-          .map((ci) =>
-            ci.id === item.id ? { ...ci, quantity: newQty } : ci
-          )
-          .filter((ci) => ci.quantity > 0),
-        totalQuantity: totalQty - 1,
-        totalAmount: subtotal - item.price,
-      },
+      cart:    { items: updatedItems },
     });
   };
 
+  /*
+    handleIncrease — quantity goes up by 1.
+    Fires add_to_cart because the user is adding one more unit.
+  */
   const handleIncrease = (item) => {
+    const updatedItems = cartItems.map((ci) =>
+      ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci
+    );
+
     dispatch(increaseQuantity(item.id));
+
     pushAddToCartEvent({
       product: item,
-      cart: {
-        items: cartItems.map((ci) =>
-          ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci
-        ),
-        totalQuantity: totalQty + 1,
-        totalAmount: subtotal + item.price,
-      },
+      cart:    { items: updatedItems },
     });
   };
 
+  /*
+    handleRemove — entire line item removed regardless of quantity.
+    Post-action items = everything except the removed item.
+  */
   const handleRemove = (item) => {
+    const updatedItems = cartItems.filter((ci) => ci.id !== item.id);
+
     dispatch(removeFromCart(item.id));
+
     pushRemoveFromCartEvent({
       product: item,
-      cart: {
-        items: cartItems.filter((ci) => ci.id !== item.id),
-        totalQuantity: totalQty - item.quantity,
-        totalAmount: subtotal - item.price * item.quantity,
-      },
+      cart:    { items: updatedItems },
     });
   };
 
-  // Empty state
+  /* ── Empty state ── */
   if (cartItems.length === 0) {
     return (
       <div className="cart-page-layout" style={{ display: "block", padding: "60px" }}>
@@ -113,15 +124,16 @@ const Cart = () => {
   return (
     <div className="cart-page-layout">
 
-      {/* ── LEFT: CART ITEMS ───────────────────────────────────────────── */}
+      {/* ── LEFT: CART ITEMS ── */}
       <div className="cart-main">
         <div className="cart-header">
           <h1 className="cart-title">Your Cart</h1>
-          <span className="cart-count-label">{totalQty} item{totalQty !== 1 ? "s" : ""}</span>
+          <span className="cart-count-label">
+            {totalQty} item{totalQty !== 1 ? "s" : ""}
+          </span>
         </div>
 
-        {/* ── AJO ZONE: CART UPSELL ──────────────────────────────────── */}
-        {/* id="ajo-cart-upsell" — AJO activates by adding class ajo-active */}
+        {/* ── AJO ZONE: CART UPSELL ── */}
         <div
           id="ajo-cart-upsell"
           className="ajo-cart-upsell"
@@ -131,7 +143,10 @@ const Cart = () => {
           <p style={{ fontSize: "13.5px", color: "var(--slate)", marginBottom: "0" }}>
             This zone is reserved for <strong>AJO Cart Upsell</strong> recommendations.
             Adobe Journey Optimizer will inject personalized product suggestions here.
-            &nbsp;<code style={{ fontSize: "11px", background: "rgba(255,107,53,0.1)", padding: "2px 6px", borderRadius: "4px" }}>data-ajo-zone="cart_upsell"</code>
+            &nbsp;
+            <code style={{ fontSize: "11px", background: "rgba(255,107,53,0.1)", padding: "2px 6px", borderRadius: "4px" }}>
+              data-ajo-zone="cart_upsell"
+            </code>
           </p>
         </div>
 
@@ -155,7 +170,7 @@ const Cart = () => {
             </div>
 
             <div className="cart-item-actions">
-              {/* Quantity control */}
+              {/* Quantity controls */}
               <div className="quantity-controls">
                 <button
                   className="quantity-button"
@@ -178,11 +193,11 @@ const Cart = () => {
               <div
                 style={{
                   fontFamily: "var(--font-display)",
-                  fontSize: "16px",
+                  fontSize:   "16px",
                   fontWeight: "700",
-                  color: "var(--navy)",
-                  minWidth: "64px",
-                  textAlign: "right",
+                  color:      "var(--navy)",
+                  minWidth:   "64px",
+                  textAlign:  "right",
                 }}
               >
                 ${(item.price * item.quantity).toFixed(2)}
@@ -200,19 +215,19 @@ const Cart = () => {
           </div>
         ))}
 
-        {/* Free shipping indicator */}
+        {/* Free shipping nudge */}
         {subtotal < 50 && (
           <div
             style={{
-              background: "var(--accent-light)",
-              border: "1px solid rgba(255,107,53,0.18)",
+              background:   "var(--accent-light)",
+              border:       "1px solid rgba(255,107,53,0.18)",
               borderRadius: "var(--radius-md)",
-              padding: "14px 18px",
-              fontSize: "13.5px",
-              color: "var(--charcoal)",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
+              padding:      "14px 18px",
+              fontSize:     "13.5px",
+              color:        "var(--charcoal)",
+              display:      "flex",
+              alignItems:   "center",
+              gap:          "10px",
             }}
           >
             <span>🚚</span>
@@ -224,7 +239,7 @@ const Cart = () => {
         )}
       </div>
 
-      {/* ── RIGHT: ORDER SUMMARY SIDEBAR ───────────────────────────────── */}
+      {/* ── RIGHT: ORDER SUMMARY SIDEBAR ── */}
       <div className="cart-sidebar">
         <div className="order-summary">
           <h3>Order Summary</h3>
@@ -257,7 +272,7 @@ const Cart = () => {
             <span className="summary-total-val">${total.toFixed(2)}</span>
           </div>
 
-          {/* Promo code */}
+          {/* Promo code input */}
           <div className="promo-input-row">
             <input
               type="text"
@@ -269,14 +284,13 @@ const Cart = () => {
             />
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => {
-                if (promoCode === "AEP10") setPromoApplied(true);
-              }}
+              onClick={() => { if (promoCode === "AEP10") setPromoApplied(true); }}
               disabled={promoApplied || !promoCode}
             >
               {promoApplied ? "✓" : "Apply"}
             </button>
           </div>
+
           {promoCode && promoCode !== "AEP10" && !promoApplied && (
             <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "8px" }}>
               Try code: <strong>AEP10</strong>
@@ -292,14 +306,12 @@ const Cart = () => {
             {auth.isAuthenticated ? "Proceed to Checkout →" : "Sign In to Checkout →"}
           </button>
 
-          {/* Security note */}
           <div className="security-note">
             <span>🔒</span>
             <span>Secure 256-bit SSL encrypted checkout</span>
           </div>
         </div>
 
-        {/* Continue shopping */}
         <Link
           to="/products"
           className="btn btn-ghost"
