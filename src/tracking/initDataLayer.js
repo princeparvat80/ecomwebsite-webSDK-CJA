@@ -488,6 +488,7 @@ const sumVal = (items) =>
   pushes are queued as plain array entries and replayed correctly
   when ACDL's enhanced push() method loads.
 */
+
 export const initDataLayer = () => {
   window.adobeDataLayer = window.adobeDataLayer || [];
 
@@ -499,21 +500,29 @@ export const initDataLayer = () => {
   /* Push baseline state — NOT an event (no "event" key) */
   window.adobeDataLayer.push({
     _princeparvat: {
-      user:    buildUserContext(),
+      user: buildUserContext(),
       session: buildSessionContext(),
     },
     identityMap: getCurrentIdentityMap(),
     cart: {
-      items:         [],
+      items: [],
       totalQuantity: 0,
-      totalValue:    0,
-      currency:      "USD",
+      totalValue: 0,
+      currency: "USD",
     },
     meta: {
-      environment:     process.env.NODE_ENV === "production" ? "prod" : "dev",
-      appVersion:      "2.0.0",
+      environment: process.env.NODE_ENV === "production" ? "prod" : "dev",
+      appVersion: "2.0.0",
       trackingVersion: "aep-v5-acdl",
       tenantNamespace: "_princeparvat",
+    },
+    /* Inside the push({}) in initDataLayer() */
+    consent: {
+      standard: "Adobe",
+      version: "2.0",
+      value: {
+        general: "in" /* hardcoded consent for sandbox */,
+      },
     },
   });
 
