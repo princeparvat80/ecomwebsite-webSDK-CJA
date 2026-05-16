@@ -22,7 +22,7 @@ const OrderConfirmation = () => {
     /*
       pushFeedbackSubmittedEvent receives rating (1–5) and
       feedbackLength (character count). Both land in
-      _princeparvat.feedback in the ACDL push for CJA analysis:
+      _aepsupport.feedback in the ACDL push for CJA analysis:
       correlate satisfaction scores with purchase value,
       product category, or UTM acquisition source.
     */
@@ -253,7 +253,7 @@ const OrderConfirmation = () => {
           <strong style={{ color: "var(--charcoal)" }}>ACDL events on this page:</strong>&nbsp;
           <code style={{ fontSize: "11px" }}>purchase</code> pushed at checkout ·&nbsp;
           <code style={{ fontSize: "11px" }}>feedback_submitted</code> pushed on submit
-          with <code style={{ fontSize: "11px" }}>_princeparvat.feedback.rating</code>
+          with <code style={{ fontSize: "11px" }}>_aepsupport.feedback.rating</code>
         </span>
       </div>
 

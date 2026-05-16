@@ -38,7 +38,7 @@ const ProductDetail = () => {
           pushViewItemEvent replaces the old updateProductDataLayer call.
           Passes the product exactly as the API returns it — pushViewItemEvent
           reads rating directly from data.rating.rate internally via
-          the _princeparvat.rating field in productListItems.
+          the _aepsupport.rating field in productListItems.
         */
         pushViewItemEvent({
           id:          data.id,

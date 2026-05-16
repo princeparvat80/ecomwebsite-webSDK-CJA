@@ -1,7 +1,7 @@
 /* ============================================================
    PRINCE AEP LAB — DATA LAYER v5
    Architecture : Adobe Client Data Layer (ACDL) — Push Pattern
-   Tenant NS    : _princeparvat  (replace with your AEP tenant ID)
+   Tenant NS    : _aepsupport  (replace with your AEP tenant ID)
    Schema ver   : 1.0
    ============================================================
 
@@ -33,7 +33,7 @@
       null = "explicitly unknown" → validation warnings in AEP.
 
    5. _prince namespace (inconsistent placeholder)
-      → _princeparvat (consistent everywhere)
+      → _aepsupport (consistent everywhere)
       WHY: One find-and-replace when setting up your AEP sandbox.
 
    6. No identityMap on events
@@ -53,12 +53,12 @@
       gives you acquisition dimensions in CJA from day one.
 
    9. No firstSeenAt / sessionCount / loginMethod
-      → Added to _princeparvat.user
+      → Added to _aepsupport.user
       WHY: RTCDP lifecycle segments. AJO conditions like
       "visited 3+ times, never purchased".
 
    10. No pageCategory / previousPage
-       → Added to _princeparvat.page
+       → Added to _aepsupport.page
        WHY: CJA navigation and section-level analysis.
 
    ─────────────────────────────────────────────────────────────
@@ -76,12 +76,12 @@
    React code NEVER calls _satellite or alloy directly.
 
    ─────────────────────────────────────────────────────────────
-   TENANT NAMESPACE: _princeparvat
+   TENANT NAMESPACE: _aepsupport
    ─────────────────────────────────────────────────────────────
    Custom field group in AEP Schema Registry:
    "Prince AEP Lab - Custom Fields"
 
-   _princeparvat
+   _aepsupport
      ├── page        { pageType, pageCategory, previousPage, viewport }
      ├── user        { isLoggedIn, loginState, authId, authNamespace,
      │                 loginMethod, firstSeenAt, sessionCount }
@@ -89,10 +89,10 @@
      └── feedback    { rating, feedbackLength, pageContext }
 
    Inside productListItems[]:
-     _princeparvat   { unitPrice, category, rating }
+     _aepsupport   { unitPrice, category, rating }
 
    FIND & REPLACE before AEP setup:
-     _princeparvat  →  your actual AEP tenant identifier
+     _aepsupport  →  your actual AEP tenant identifier
    ============================================================ */
 
 
@@ -176,7 +176,7 @@ const getTimestamp = () => new Date().toISOString();
 /*
   Detects device type from navigator.userAgent.
   Returns: "mobile" | "tablet" | "desktop"
-  Used in _princeparvat.session.deviceType for CJA device analysis
+  Used in _aepsupport.session.deviceType for CJA device analysis
   and AJO journey conditions based on device.
 */
 const getDeviceType = () => {
@@ -363,7 +363,7 @@ const getCurrentIdentityMap = () => {
 };
 
 /*
-  buildUserContext — constructs _princeparvat.user for every push.
+  buildUserContext — constructs _aepsupport.user for every push.
   Merges live auth state with persisted meta (firstSeenAt, sessionCount).
   The overrides param lets login/logout events set specific fields.
 */
@@ -383,7 +383,7 @@ const buildUserContext = (overrides = {}) => {
 };
 
 /*
-  buildSessionContext — constructs _princeparvat.session for every push.
+  buildSessionContext — constructs _aepsupport.session for every push.
   Reads sessionId, entryPage, deviceType, and UTM params.
 */
 const buildSessionContext = () => ({
@@ -395,7 +395,7 @@ const buildSessionContext = () => ({
 });
 
 /*
-  buildPageContext — constructs _princeparvat.page for a given route.
+  buildPageContext — constructs _aepsupport.page for a given route.
   Used in pushes that know their page context statically.
   For page_view events, PageTracker passes the values explicitly.
 */
@@ -417,7 +417,7 @@ const buildPageContext = (pageType, pageCategory, previousPage = null) => ({
 
   productListItems → XDM-compliant array
     Standard XDM fields: SKU, name, priceTotal, quantity, currencyCode
-    Custom fields: _princeparvat { unitPrice, category, rating }
+    Custom fields: _aepsupport { unitPrice, category, rating }
 
   This is what Launch reads and maps to AEP Edge.
   This is what CJA expands per product row.
@@ -450,8 +450,8 @@ const buildCartData = (items = []) => {
     priceTotal:   parseFloat((item.price * item.quantity).toFixed(2)),
     quantity:     item.quantity,
     currencyCode: "USD",
-    /* Custom field group — replace _princeparvat with your tenant ID */
-    _princeparvat: {
+    /* Custom field group — replace _aepsupport with your tenant ID */
+    _aepsupport: {
       unitPrice: item.price,
       category:  item.category || null,
       rating:    item.rating   || null,
@@ -499,7 +499,7 @@ export const initDataLayer = () => {
 
   /* Push baseline state — NOT an event (no "event" key) */
   window.adobeDataLayer.push({
-    _princeparvat: {
+    _aepsupport: {
       user: buildUserContext(),
       session: buildSessionContext(),
     },
@@ -514,7 +514,7 @@ export const initDataLayer = () => {
       environment: process.env.NODE_ENV === "production" ? "prod" : "dev",
       appVersion: "2.0.0",
       trackingVersion: "aep-v5-acdl",
-      tenantNamespace: "_princeparvat",
+      tenantNamespace: "_aepsupport",
     },
     /* Inside the push({}) in initDataLayer() */
     consent: {
@@ -546,7 +546,7 @@ export const initDataLayer = () => {
      timestamp    → ISO 8601 UTC string (required by AEP Edge)
      identityMap  → RTCDP identity stitching (on every push)
      web          → XDM web context
-     _princeparvat → custom field group (page, user, session)
+     _aepsupport → custom field group (page, user, session)
    + event-specific: commerce, productListItems, cart, transaction
    ============================================================ */
 
@@ -561,7 +561,7 @@ export const initDataLayer = () => {
    web.webPageDetails.pageViews → CJA page view METRIC FLAG
    web.webReferrer.URL          → previous URL
 
-   Custom fields (_princeparvat.page):
+   Custom fields (_aepsupport.page):
    pageType     → fine-grained type (CJA custom dimension)
    pageCategory → section grouping (AJO journey entry condition)
    previousPage → navigation path analysis
@@ -595,7 +595,7 @@ export const pushPageViewEvent = ({
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext(pageType, pageCategory, previousPageUrl),
       user:    buildUserContext(),
       session: buildSessionContext(),
@@ -612,7 +612,7 @@ export const pushPageViewEvent = ({
     "color:#3B82F6;font-weight:bold;",
     `| ${pageType} (${pageCategory}) | ${pageUrl}`,
     "\n  identity →", push.identityMap,
-    "\n  utm      →", push._princeparvat.session.utm
+    "\n  utm      →", push._aepsupport.session.utm
   );
 };
 
@@ -634,7 +634,7 @@ export const pushViewItemEvent = (product) => {
       priceTotal:   product.price,
       quantity:     1,
       currencyCode: "USD",
-      _princeparvat: {
+      _aepsupport: {
         unitPrice: product.price,
         category:  product.category || null,
         rating:    product.rating   || null,
@@ -664,7 +664,7 @@ export const pushViewItemEvent = (product) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext(
         PRODUCT_DETAIL_META.pageType,
         PRODUCT_DETAIL_META.pageCategory
@@ -731,7 +731,7 @@ export const pushAddToCartEvent = ({ product, cart }) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page: buildPageContext(
         isOnDetailPage ? PRODUCT_DETAIL_META.pageType : "product_list",
         "commerce"
@@ -796,7 +796,7 @@ export const pushRemoveFromCartEvent = ({ product, cart }) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext("cart", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
@@ -855,7 +855,7 @@ export const pushViewCartEvent = (reduxCart) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext("cart", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
@@ -916,7 +916,7 @@ export const pushBeginCheckoutEvent = (reduxCart) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext("checkout", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
@@ -964,7 +964,7 @@ export const pushCheckoutClickEvent = () => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext("cart", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
@@ -1045,7 +1045,7 @@ export const pushPurchaseEvent = ({ cart, orderId }) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext("checkout", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
@@ -1107,7 +1107,7 @@ export const pushLoginEvent = (email) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page: buildPageContext("login", "account"),
       user: {
         isLoggedIn:    true,
@@ -1131,7 +1131,7 @@ export const pushLoginEvent = (email) => {
     "color:#10B981;font-weight:bold;",
     `| ${email}`,
     "\n  identityMap →", push.identityMap,
-    "\n  user        →", push._princeparvat.user
+    "\n  user        →", push._aepsupport.user
   );
 };
 
@@ -1162,7 +1162,7 @@ export const pushLogoutEvent = () => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page: buildPageContext("home", "acquisition"),
       user: {
         isLoggedIn:    false,
@@ -1192,7 +1192,7 @@ export const pushLogoutEvent = () => {
     "%c🔓 logout",
     "color:#EF4444;font-weight:bold;",
     "\n  identityMap →", push.identityMap,
-    "\n  user        →", push._princeparvat.user
+    "\n  user        →", push._aepsupport.user
   );
 };
 
@@ -1202,7 +1202,7 @@ export const pushLogoutEvent = () => {
    eventType : web.formFilledOut
    Called by : OrderConfirmation.js on feedback submit
 
-   _princeparvat.feedback fields are custom dimensions in CJA.
+   _aepsupport.feedback fields are custom dimensions in CJA.
    Use them to correlate satisfaction scores with:
    - purchase value (high spenders satisfied?)
    - product category (which categories delight customers?)
@@ -1224,7 +1224,7 @@ export const pushFeedbackSubmittedEvent = ({ rating, feedbackLength }) => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page: buildPageContext("order_confirmation", "commerce"),
       feedback: {
         rating:         rating         || null,
@@ -1245,7 +1245,7 @@ export const pushFeedbackSubmittedEvent = ({ rating, feedbackLength }) => {
     "%c📝 feedback_submitted",
     "color:#8B5CF6;font-weight:bold;",
     `| rating: ${rating} | length: ${feedbackLength}`,
-    "\n  feedback →", push._princeparvat.feedback
+    "\n  feedback →", push._aepsupport.feedback
   );
 };
 
@@ -1276,7 +1276,7 @@ export const pushExitIntentEvent = () => {
       },
     },
 
-    _princeparvat: {
+    _aepsupport: {
       page:    buildPageContext("home", "acquisition"),
       user:    buildUserContext(),
       session: buildSessionContext(),
@@ -1291,6 +1291,6 @@ export const pushExitIntentEvent = () => {
   console.log(
     "%c🚪 exit_intent",
     "color:#F59E0B;font-weight:bold;",
-    "\n  session →", push._princeparvat.session
+    "\n  session →", push._aepsupport.session
   );
 };
