@@ -849,9 +849,8 @@ export const pushViewCartEvent = (reduxCart) => {
 
     web: {
       webPageDetails: {
-        name:      "Cart",
-        URL:       window.location.pathname,
-        pageViews: { value: 1 },
+        name: "Cart",
+        URL:  window.location.pathname,
       },
     },
 
