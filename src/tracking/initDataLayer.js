@@ -1146,7 +1146,32 @@ export const pushLoginEvent = (email) => {
    the user logs in again.
    ───────────────────────────────────────────────────────────── */
 export const pushLogoutEvent = () => {
-  const meta = getUserMeta();
+  const meta     = getUserMeta();
+  const pathname = window.location.pathname;
+
+  /*
+    Derive page context from the ACTUAL current page.
+    Logout can be triggered from any page via the Navbar —
+    hardcoding "Logout" / "home" would misreport the exit page.
+    CJA uses this to answer: "From which page do users log out most?"
+  */
+  const currentMeta = PAGE_META[pathname] || {
+    pageType:     "product_detail",
+    pageCategory: "commerce",
+  };
+
+  /* Derive a readable page name from the pathname */
+  const currentPageName = (() => {
+    if (pathname === "/")            return "Home";
+    if (pathname === "/products")    return "Products";
+    if (pathname === "/cart")        return "Cart";
+    if (pathname === "/checkout")    return "Checkout";
+    if (pathname === "/confirmation") return "Order Confirmation";
+    if (pathname === "/login")       return "Login";
+    /* product detail: /product/3-mens-cotton-jacket → "Product Detail" */
+    if (pathname.startsWith("/product/")) return "Product Detail";
+    return pathname.replace(/^\//, "").replace(/-/g, " ");
+  })();
 
   const push = {
     event:     EVENT_NAMES.LOGOUT,
@@ -1156,13 +1181,13 @@ export const pushLogoutEvent = () => {
 
     web: {
       webPageDetails: {
-        name: "Logout",
-        URL:  window.location.pathname,
+        name: currentPageName,
+        URL:  pathname,
       },
     },
 
     _aepsupport: {
-      page: buildPageContext("home", "acquisition"),
+      page: buildPageContext(currentMeta.pageType, currentMeta.pageCategory),
       user: {
         isLoggedIn:    false,
         loginState:    "loggedOut",
@@ -1190,6 +1215,7 @@ export const pushLogoutEvent = () => {
   console.log(
     "%c🔓 logout",
     "color:#EF4444;font-weight:bold;",
+    `| from: ${currentPageName} (${pathname})`,
     "\n  identityMap →", push.identityMap,
     "\n  user        →", push._aepsupport.user
   );
