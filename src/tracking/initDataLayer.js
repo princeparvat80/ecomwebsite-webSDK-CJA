@@ -61,6 +61,15 @@
        → Added to _aepsupport.page
        WHY: CJA navigation and section-level analysis.
 
+   11. No ECID as explicit field (v5.1 addition)
+       → _aepsupport.ecid on every push
+       WHY: identityMap holds ECID for profile stitching but
+       is a complex map type — CJA cannot use it as a plain
+       dimension. _aepsupport.ecid is a simple string field
+       that CJA can surface as a draggable dimension for
+       unique visitor counts, session breakdowns, and
+       cross-device journey analysis.
+
    ─────────────────────────────────────────────────────────────
    HOW ACDL WORKS
    ─────────────────────────────────────────────────────────────
@@ -74,6 +83,8 @@
    8  Edge → AEP Dataset → RTCDP profile → CJA → AJO
 
    React code NEVER calls _satellite or alloy directly.
+   Exception: getECID() calls alloy("getIdentity") once to
+   read the ECID assigned by Web SDK, then caches it.
 
    ─────────────────────────────────────────────────────────────
    TENANT NAMESPACE: _aepsupport
@@ -86,6 +97,7 @@
      ├── user        { isLoggedIn, loginState, authId, authNamespace,
      │                 loginMethod, firstSeenAt, sessionCount }
      ├── session     { id, startTime, entryPage, deviceType, utm{} }
+     ├── ecid        string — ECID as a plain CJA-reportable dimension
      └── feedback    { rating, feedbackLength, pageContext }
 
    Inside productListItems[]:
@@ -100,11 +112,7 @@
    SECTION 1 — CONSTANTS
    ============================================================ */
 
-/*
-  EVENT_NAMES — the "event" key in every ACDL push.
-  The Launch "Adobe Client Data Layer" extension listens for
-  these exact strings as rule triggers.
-*/
+/* ACDL event trigger keys — Launch rule conditions listen for these strings. */
 export const EVENT_NAMES = {
   PAGE_VIEW:          "page_view",
   VIEW_ITEM:          "view_item",
@@ -120,12 +128,7 @@ export const EVENT_NAMES = {
   EXIT_INTENT:        "exit_intent",
 };
 
-/*
-  EVENT_TYPES — the "eventType" key in every ACDL push.
-  These are XDM standard strings. Required by AEP schema.
-  CJA uses these to populate standard commerce metrics.
-  Launch maps these into xdm.eventType.
-*/
+/* XDM eventType strings — required by AEP schema, used by CJA for standard commerce metrics. */
 export const EVENT_TYPES = {
   PAGE_VIEW:          "web.webpagedetails.pageViews",
   VIEW_ITEM:          "commerce.productViews",
@@ -141,14 +144,7 @@ export const EVENT_TYPES = {
   EXIT_INTENT:        "web.webInteraction.linkClicks",
 };
 
-/*
-  PAGE_META — maps every route pathname to its pageType and pageCategory.
-  Used by PageTracker.js when calling pushPageViewEvent().
-
-  pageType     → fine-grained CJA dimension (custom field group)
-  pageCategory → section grouping for AJO journey entry conditions
-                 e.g. "entered from a commerce page"
-*/
+/* Route → pageType/pageCategory map. Used by PageTracker on every route change. */
 export const PAGE_META = {
   "/":             { pageType: "home",              pageCategory: "acquisition" },
   "/products":     { pageType: "product_list",       pageCategory: "commerce"   },
@@ -158,7 +154,7 @@ export const PAGE_META = {
   "/confirmation": { pageType: "order_confirmation", pageCategory: "commerce"   },
 };
 
-/* Product detail pages match /product/* — handled separately */
+/* Product detail pages match /product/* — handled separately from PAGE_META. */
 export const PRODUCT_DETAIL_META = {
   pageType:     "product_detail",
   pageCategory: "commerce",
@@ -170,15 +166,10 @@ export const PRODUCT_DETAIL_META = {
    Not exported. Used only within this file.
    ============================================================ */
 
-/* Returns ISO 8601 UTC timestamp string — required by AEP Edge */
+/* Returns current time as ISO 8601 UTC string — required format by AEP Edge. */
 const getTimestamp = () => new Date().toISOString();
 
-/*
-  Detects device type from navigator.userAgent.
-  Returns: "mobile" | "tablet" | "desktop"
-  Used in _aepsupport.session.deviceType for CJA device analysis
-  and AJO journey conditions based on device.
-*/
+/* Detects device type from userAgent. Returns "mobile" | "tablet" | "desktop". */
 const getDeviceType = () => {
   const ua = navigator.userAgent.toLowerCase();
   if (/tablet|ipad|playbook|silk|(android(?!.*mobile))/.test(ua)) return "tablet";
@@ -187,16 +178,9 @@ const getDeviceType = () => {
 };
 
 /*
-  Reads UTM parameters from the current URL.
-  Falls back to sessionStorage if no UTMs in current URL so that
-  UTM attribution persists across internal page navigations within
-  the same session — matching how GA4 handles UTM persistence.
-
-  Stored in sessionStorage (not localStorage) so UTMs reset when
-  the session ends. Persisting in localStorage would contaminate
-  future sessions with old campaign data.
-
-  Returns: { source, medium, campaign, term, content }
+  Reads UTM params from the current URL.
+  Persists them in sessionStorage so attribution survives internal SPA navigation.
+  Falls back to sessionStorage if no UTMs are present in the current URL.
 */
 const UTM_STORAGE_KEY = "aep_utm";
 
@@ -226,20 +210,11 @@ const getUTMParams = () => {
   return { source: null, medium: null, campaign: null, term: null, content: null };
 };
 
-/*
-  Session ID — generated once per browser session.
-  Stored in sessionStorage → resets when tab closes.
-
-  Format: "sess-{timestamp}-{random7chars}"
-  Example: "sess-1747390200000-x4k9mzp"
-
-  Used by CJA for visit-level funnel analysis.
-  Used by AJO for "abandoned this session" journey triggers.
-*/
 const SESSION_ID_KEY    = "aep_session_id";
 const SESSION_ENTRY_KEY = "aep_session_entry";
 const SESSION_START_KEY = "aep_session_start";
 
+/* Returns existing session ID or generates a new one. Resets when the tab closes. */
 const getSessionId = () => {
   let id = sessionStorage.getItem(SESSION_ID_KEY);
   if (!id) {
@@ -249,7 +224,7 @@ const getSessionId = () => {
   return id;
 };
 
-/* Entry page = first page pathname visited in this session */
+/* Returns the first page pathname visited this session. Written once, never overwritten. */
 const getSessionEntryPage = () => {
   let entry = sessionStorage.getItem(SESSION_ENTRY_KEY);
   if (!entry) {
@@ -260,28 +235,17 @@ const getSessionEntryPage = () => {
 };
 
 /*
-  User meta — firstSeenAt and sessionCount.
-  Stored in localStorage (persists across sessions).
-
-  firstSeenAt:
-    Written ONCE on first ever visit. Never overwritten.
-    RTCDP uses this for "new vs returning" audience segments.
-
-  sessionCount:
-    Incremented once per session (not per page view).
-    New session = SESSION_ID_KEY absent from sessionStorage
-    (meaning the tab was closed and reopened).
-
-    AJO journey condition example:
-    "sessionCount >= 3 AND no purchase event → send win-back offer"
+  Reads and updates persistent user meta from localStorage.
+  firstSeenAt  — written once on first ever visit, never overwritten.
+  sessionCount — incremented once per new browser session (tab close → reopen).
 */
 const USER_META_KEY = "aep_user_meta";
 
 const getUserMeta = () => {
   try {
-    const stored   = localStorage.getItem(USER_META_KEY);
-    const meta     = stored ? JSON.parse(stored) : null;
-    const now      = getTimestamp();
+    const stored    = localStorage.getItem(USER_META_KEY);
+    const meta      = stored ? JSON.parse(stored) : null;
+    const now       = getTimestamp();
     const isNewSess = !sessionStorage.getItem(SESSION_ID_KEY);
 
     if (!meta) {
@@ -292,7 +256,7 @@ const getUserMeta = () => {
 
     if (isNewSess) {
       const updated = {
-        firstSeenAt:  meta.firstSeenAt,           /* Never overwrite */
+        firstSeenAt:  meta.firstSeenAt,
         sessionCount: (meta.sessionCount || 1) + 1,
       };
       localStorage.setItem(USER_META_KEY, JSON.stringify(updated));
@@ -305,7 +269,7 @@ const getUserMeta = () => {
   }
 };
 
-/* Reads current auth from localStorage — works after page refreshes */
+/* Reads auth state from localStorage — survives page refreshes. */
 const getAuthState = () => {
   try {
     const stored = localStorage.getItem("ECOM_AUTH_USER");
@@ -320,28 +284,10 @@ const getAuthState = () => {
 };
 
 /*
-  buildIdentityMap — constructs XDM-compliant identityMap.
-
-  HOW IDENTITY STITCHING WORKS IN RTCDP:
-  ─────────────────────────────────────────
-  1. Guest arrives → Web SDK auto-assigns ECID (first-party cookie)
-  2. User logs in → pushLoginEvent(email) called
-  3. That push has identityMap.Email { authenticatedState: "authenticated" }
-  4. AEP Edge reads: ECID from Web SDK cookie + Email from identityMap
-  5. RTCDP merges anonymous profile (ECID) + known profile (Email)
-     into ONE unified real-time profile
-  6. All pre-login events are retroactively attributed to known profile
-  7. AJO finds the profile by email and enrolls it in journeys
-
-  Rules:
-  - primary: false for Email — ECID is ALWAYS primary
-  - ECID is NOT set here — Web SDK manages it automatically
-  - Setting ECID manually would conflict with Web SDK management
-
-  authenticatedState values (XDM spec):
-    "ambiguous"     → guest / auth status unknown
-    "authenticated" → actively logged in this session
-    "loggedOut"     → actively logged out
+  Builds XDM-compliant identityMap for a given email.
+  ECID is intentionally NOT set here — Web SDK manages it automatically.
+  Setting ECID here would conflict with Web SDK's identity cookie management.
+  authenticatedState: "authenticated" is what triggers RTCDP identity stitching.
 */
 const buildIdentityMap = (email, authenticatedState = "ambiguous") => {
   if (!email) return {};
@@ -356,17 +302,13 @@ const buildIdentityMap = (email, authenticatedState = "ambiguous") => {
   };
 };
 
-/* Returns identityMap for current visitor using stored auth state */
+/* Returns identityMap for the current visitor based on stored auth state. */
 const getCurrentIdentityMap = () => {
   const { email, isAuthenticated } = getAuthState();
   return buildIdentityMap(email, isAuthenticated ? "authenticated" : "ambiguous");
 };
 
-/*
-  buildUserContext — constructs _aepsupport.user for every push.
-  Merges live auth state with persisted meta (firstSeenAt, sessionCount).
-  The overrides param lets login/logout events set specific fields.
-*/
+/* Builds _aepsupport.user — merges live auth state with persisted firstSeenAt/sessionCount. */
 const buildUserContext = (overrides = {}) => {
   const { email, isAuthenticated } = getAuthState();
   const meta = getUserMeta();
@@ -382,10 +324,7 @@ const buildUserContext = (overrides = {}) => {
   };
 };
 
-/*
-  buildSessionContext — constructs _aepsupport.session for every push.
-  Reads sessionId, entryPage, deviceType, and UTM params.
-*/
+/* Builds _aepsupport.session — sessionId, entryPage, deviceType, UTM params. */
 const buildSessionContext = () => ({
   id:         getSessionId(),
   startTime:  sessionStorage.getItem(SESSION_START_KEY) || getTimestamp(),
@@ -394,11 +333,7 @@ const buildSessionContext = () => ({
   utm:        getUTMParams(),
 });
 
-/*
-  buildPageContext — constructs _aepsupport.page for a given route.
-  Used in pushes that know their page context statically.
-  For page_view events, PageTracker passes the values explicitly.
-*/
+/* Builds _aepsupport.page — pageType, pageCategory, previousPage, viewport dimensions. */
 const buildPageContext = (pageType, pageCategory, previousPage = null) => ({
   pageType:     pageType     || "other",
   pageCategory: pageCategory || "other",
@@ -410,18 +345,10 @@ const buildPageContext = (pageType, pageCategory, previousPage = null) => ({
 });
 
 /*
-  buildCartData — normalizes Redux cartItems into two formats.
-
-  normalizedItems → deduplicated internal snapshot
-    field names: id, name, category, price, quantity, rating
-
-  productListItems → XDM-compliant array
-    Standard XDM fields: SKU, name, priceTotal, quantity, currencyCode
-    Custom fields: _aepsupport { unitPrice, category, rating }
-
-  This is what Launch reads and maps to AEP Edge.
-  This is what CJA expands per product row.
-  This is what AJO reads for abandoned cart messages.
+  Normalizes Redux cartItems into two formats:
+  normalizedItems    — deduplicated internal snapshot (id, name, price, quantity, etc.)
+  productListItems   — XDM-compliant array (SKU, name, priceTotal, quantity, currencyCode)
+  Both are sent on cart/checkout/purchase events for CJA per-product row expansion.
 */
 const buildCartData = (items = []) => {
   const map = {};
@@ -444,13 +371,11 @@ const buildCartData = (items = []) => {
   const normalizedItems = Object.values(map);
 
   const productListItems = normalizedItems.map((item) => ({
-    /* XDM standard — do NOT rename these keys */
     SKU:          item.id,
     name:         item.name,
     priceTotal:   parseFloat((item.price * item.quantity).toFixed(2)),
     quantity:     item.quantity,
     currencyCode: "USD",
-    /* Custom field group — replace _aepsupport with your tenant ID */
     _aepsupport: {
       unitPrice: item.price,
       category:  item.category || null,
@@ -461,67 +386,78 @@ const buildCartData = (items = []) => {
   return { normalizedItems, productListItems };
 };
 
+/* Sums total item quantity across all cart items. */
 const sumQty = (items) =>
   items.reduce((s, i) => s + i.quantity, 0);
 
+/* Sums total cart value (price × quantity per item), rounded to 2 decimal places. */
 const sumVal = (items) =>
   parseFloat(items.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2));
 
 
 /* ============================================================
-   SECTION 3 — INITIALIZER
+   SECTION 3 — ECID HELPER
+   Reads the ECID assigned by Web SDK via alloy("getIdentity").
+   Cached after the first call — subsequent calls return instantly.
+   Used to populate _aepsupport.ecid as a plain string field
+   so CJA can use ECID as a reportable dimension (identityMap
+   is a complex type that CJA cannot surface as a dimension).
+   ============================================================ */
+
+let cachedECID = null;
+
+export const getECID = async () => {
+  if (cachedECID) return cachedECID;
+  try {
+    const result = await window.alloy("getIdentity", { namespaces: ["ECID"] });
+    cachedECID = result?.identity?.ECID?.[0]?.id || null;
+    return cachedECID;
+  } catch {
+    return null;
+  }
+};
+
+
+/* ============================================================
+   SECTION 4 — INITIALIZER
    Call ONCE in index.js BEFORE ReactDOM.createRoot().render()
    ============================================================ */
 
 /*
-  initDataLayer()
-
-  Sets up window.adobeDataLayer as the ACDL array and pushes
-  the baseline state snapshot.
-
-  This push has NO "event" key — it is a state snapshot only.
-  The ACDL extension will NOT fire any Launch event rules from it.
-
-  window.adobeDataLayer = window.adobeDataLayer || []:
-  The ACDL library (loaded by the Launch extension) may load
-  before OR after this init runs. The || [] ensures our early
-  pushes are queued as plain array entries and replayed correctly
-  when ACDL's enhanced push() method loads.
+  Sets up window.adobeDataLayer and pushes the baseline state snapshot.
+  This push has NO "event" key — it is state only, Launch fires no rules from it.
+  Records session start time once. Logs init summary to console.
 */
-
 export const initDataLayer = () => {
   window.adobeDataLayer = window.adobeDataLayer || [];
 
-  /* Record session start time once */
   if (!sessionStorage.getItem(SESSION_START_KEY)) {
     sessionStorage.setItem(SESSION_START_KEY, getTimestamp());
   }
 
-  /* Push baseline state — NOT an event (no "event" key) */
   window.adobeDataLayer.push({
     _aepsupport: {
-      user: buildUserContext(),
+      user:    buildUserContext(),
       session: buildSessionContext(),
     },
     identityMap: getCurrentIdentityMap(),
     cart: {
-      items: [],
+      items:         [],
       totalQuantity: 0,
-      totalValue: 0,
-      currency: "USD",
+      totalValue:    0,
+      currency:      "USD",
     },
     meta: {
-      environment: process.env.NODE_ENV === "production" ? "prod" : "dev",
-      appVersion: "2.0.0",
-      trackingVersion: "aep-v5-acdl",
-      tenantNamespace: "_aepsupport",
+      environment:      process.env.NODE_ENV === "production" ? "prod" : "dev",
+      appVersion:       "2.0.0",
+      trackingVersion:  "aep-v5-acdl",
+      tenantNamespace:  "_aepsupport",
     },
-    /* Inside the push({}) in initDataLayer() */
     consent: {
       standard: "Adobe",
-      version: "2.0",
+      version:  "2.0",
       value: {
-        general: "in" /* hardcoded consent for sandbox */,
+        general: "in",
       },
     },
   });
@@ -538,42 +474,32 @@ export const initDataLayer = () => {
 
 
 /* ============================================================
-   SECTION 4 — EVENT PUSH FUNCTIONS
+   SECTION 5 — EVENT PUSH FUNCTIONS
 
-   EVERY push contains:
-     event        → ACDL trigger key (Launch listens for this)
-     eventType    → XDM eventType string (required by XDM schema)
-     timestamp    → ISO 8601 UTC string (required by AEP Edge)
+   Every push contains:
+     event        → ACDL trigger string (Launch rule listens for this)
+     eventType    → XDM standard string (required by schema)
+     timestamp    → ISO 8601 UTC (required by AEP Edge)
      identityMap  → RTCDP identity stitching (on every push)
-     web          → XDM web context
-     _aepsupport → custom field group (page, user, session)
-   + event-specific: commerce, productListItems, cart, transaction
+     _aepsupport  → custom fields: page, user, session, ecid
+   + event-specific: web, commerce, productListItems, cart
    ============================================================ */
 
+
 /* ─────────────────────────────────────────────────────────────
-   pushPageViewEvent
-   eventType : web.webpagedetails.pageViews
-   Called by : PageTracker.js on every React Router route change
-
-   Standard XDM fields populated:
-   web.webPageDetails.name      → CJA "Page Name" dimension
-   web.webPageDetails.URL       → CJA "Page URL" dimension
-   web.webPageDetails.pageViews → CJA page view METRIC FLAG
-   web.webReferrer.URL          → previous URL
-
-   Custom fields (_aepsupport.page):
-   pageType     → fine-grained type (CJA custom dimension)
-   pageCategory → section grouping (AJO journey entry condition)
-   previousPage → navigation path analysis
-   viewport     → rendering context
+   pushPageViewEvent — fires on every SPA route change.
+   Captures page name, URL, type, category, referrer, identity,
+   UTM attribution, and ECID. Called by PageTracker.js.
    ───────────────────────────────────────────────────────────── */
-export const pushPageViewEvent = ({
+export const pushPageViewEvent = async ({
   pageName,
   pageType,
   pageCategory,
   pageUrl,
   previousPageUrl,
 }) => {
+  const ecid = await getECID();
+
   const push = {
     event:     EVENT_NAMES.PAGE_VIEW,
     eventType: EVENT_TYPES.PAGE_VIEW,
@@ -588,8 +514,7 @@ export const pushPageViewEvent = ({
         /*
           For SPA internal navigation, document.referrer is always
           the domain root — use previousPageUrl from PageTracker.
-          document.referrer is only useful for the very first page
-          load (external referrer).
+          document.referrer is only useful on the very first page load.
         */
         URL: previousPageUrl || document.referrer || null,
       },
@@ -599,6 +524,7 @@ export const pushPageViewEvent = ({
       page:    buildPageContext(pageType, pageCategory, previousPageUrl),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -612,21 +538,20 @@ export const pushPageViewEvent = ({
     "color:#3B82F6;font-weight:bold;",
     `| ${pageType} (${pageCategory}) | ${pageUrl}`,
     "\n  identity →", push.identityMap,
+    "\n  ecid     →", ecid,
     "\n  utm      →", push._aepsupport.session.utm
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushViewItemEvent  (replaces: updateProductDataLayer)
-   eventType : commerce.productViews
-   Called by : ProductDetail.js after product data is fetched
-
-   productListItems has one item — the product being viewed.
-   quantity: 1 (not in cart yet, just viewed).
-   priceTotal = unitPrice (no quantity multiplier for a view).
+   pushViewItemEvent — fires when a product detail page loads.
+   Captures SKU, name, price, category, rating, and ECID.
+   Called by ProductDetail.js after API fetch completes.
    ───────────────────────────────────────────────────────────── */
-export const pushViewItemEvent = (product) => {
+export const pushViewItemEvent = async (product) => {
+  const ecid = await getECID();
+
   const productListItems = [
     {
       SKU:          String(product.id),
@@ -648,11 +573,6 @@ export const pushViewItemEvent = (product) => {
 
     commerce: {
       productViews: { value: 1 },
-      /*
-        All other commerce keys are intentionally OMITTED (not null).
-        Omitted = "not applicable". null = "explicitly unknown".
-        AEP XDM schema validation treats these differently.
-      */
     },
 
     productListItems,
@@ -671,6 +591,7 @@ export const pushViewItemEvent = (product) => {
       ),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -684,26 +605,24 @@ export const pushViewItemEvent = (product) => {
     "color:#8B5CF6;font-weight:bold;",
     `| SKU: ${product.id} | ${product.name}`,
     "\n  productListItems →", productListItems,
+    "\n  ecid             →", ecid,
     "\n  identity         →", push.identityMap
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushAddToCartEvent
-   eventType : commerce.productListAdds
-   Called by : Product.js, ProductDetail.js
-
-   productListItems = FULL cart state AFTER the add.
-   cart snapshot = cart state AFTER the add.
-   CJA and AJO always receive the complete cart at point of event.
+   pushAddToCartEvent — fires when a product is added to cart.
+   productListItems = full cart state AFTER the add.
+   Called by Product.js and ProductDetail.js.
    ───────────────────────────────────────────────────────────── */
-export const pushAddToCartEvent = ({ product, cart }) => {
+export const pushAddToCartEvent = async ({ product, cart }) => {
   if (!cart?.items) {
     console.warn("[ACDL] pushAddToCartEvent: cart.items missing — push skipped");
     return;
   }
 
+  const ecid = await getECID();
   const { normalizedItems, productListItems } = buildCartData(cart.items);
   const isOnDetailPage = window.location.pathname.startsWith("/product/");
 
@@ -738,6 +657,7 @@ export const pushAddToCartEvent = ({ product, cart }) => {
       ),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -751,21 +671,19 @@ export const pushAddToCartEvent = ({ product, cart }) => {
     "color:#10B981;font-weight:bold;",
     `| SKU: ${product.id} | cart: $${push.cart.totalValue}`,
     "\n  productListItems →", productListItems,
+    "\n  ecid             →", ecid,
     "\n  identity         →", push.identityMap
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushRemoveFromCartEvent
-   eventType : commerce.productListRemovals
-   Called by : Cart.js on remove or quantity decrease to 0
-
-   productListItems = cart AFTER removal (removed item not present).
-   web.webInteraction.name captures what was removed — useful in
-   CJA for "most frequently removed products" analysis.
+   pushRemoveFromCartEvent — fires when a product is removed from cart.
+   productListItems = cart state AFTER removal (removed item absent).
+   Called by Cart.js on trash icon click.
    ───────────────────────────────────────────────────────────── */
-export const pushRemoveFromCartEvent = ({ product, cart }) => {
+export const pushRemoveFromCartEvent = async ({ product, cart }) => {
+  const ecid = await getECID();
   const { normalizedItems, productListItems } = buildCartData(cart?.items || []);
 
   const push = {
@@ -800,6 +718,7 @@ export const pushRemoveFromCartEvent = ({ product, cart }) => {
       page:    buildPageContext("cart", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -812,22 +731,24 @@ export const pushRemoveFromCartEvent = ({ product, cart }) => {
     "%c🗑️  remove_from_cart",
     "color:#EF4444;font-weight:bold;",
     `| SKU: ${product.id} | remaining: ${normalizedItems.length} items`,
-    "\n  productListItems →", productListItems
+    "\n  productListItems →", productListItems,
+    "\n  ecid             →", ecid
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushViewCartEvent
-   eventType : commerce.productListViews
-   Called by : Cart.js in useEffect on mount (cart has items)
+   pushViewCartEvent — fires when the Cart page mounts with items.
+   Captures full cart contents for CJA cart abandonment analysis.
+   Called by Cart.js useEffect.
    ───────────────────────────────────────────────────────────── */
-export const pushViewCartEvent = (reduxCart) => {
+export const pushViewCartEvent = async (reduxCart) => {
   if (!reduxCart?.cartItems) {
     console.warn("[ACDL] pushViewCartEvent: cartItems missing — push skipped");
     return;
   }
 
+  const ecid = await getECID();
   const { normalizedItems, productListItems } = buildCartData(reduxCart.cartItems);
 
   const push = {
@@ -858,6 +779,7 @@ export const pushViewCartEvent = (reduxCart) => {
       page:    buildPageContext("cart", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -870,25 +792,25 @@ export const pushViewCartEvent = (reduxCart) => {
     "%c👀 view_cart",
     "color:#F59E0B;font-weight:bold;",
     `| ${normalizedItems.length} items | $${push.cart.totalValue}`,
-    "\n  productListItems →", productListItems
+    "\n  productListItems →", productListItems,
+    "\n  ecid             →", ecid
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushBeginCheckoutEvent
-   eventType : commerce.checkouts
-   Called by : Checkout.js useEffect (after auth confirmed)
-
-   identityMap here always has "authenticated" state because
-   Checkout.js redirects unauthenticated users before this fires.
+   pushBeginCheckoutEvent — fires when Checkout page mounts.
+   Always authenticated (Cart redirects guests to Login first).
+   Captures full cart at checkout start for funnel analysis.
+   Called by Checkout.js useEffect.
    ───────────────────────────────────────────────────────────── */
-export const pushBeginCheckoutEvent = (reduxCart) => {
+export const pushBeginCheckoutEvent = async (reduxCart) => {
   if (!reduxCart?.cartItems) {
     console.warn("[ACDL] pushBeginCheckoutEvent: cartItems missing — push skipped");
     return;
   }
 
+  const ecid = await getECID();
   const { normalizedItems, productListItems } = buildCartData(reduxCart.cartItems);
 
   const push = {
@@ -919,6 +841,7 @@ export const pushBeginCheckoutEvent = (reduxCart) => {
       page:    buildPageContext("checkout", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -932,21 +855,21 @@ export const pushBeginCheckoutEvent = (reduxCart) => {
     "color:#6366F1;font-weight:bold;",
     `| ${normalizedItems.length} items | $${push.cart.totalValue}`,
     "\n  productListItems →", productListItems,
+    "\n  ecid             →", ecid,
     "\n  identity         →", push.identityMap
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushCheckoutClickEvent
-   eventType : web.webInteraction.linkClicks
-   Called by : Cart.js when checkout button is clicked
-
-   No commerce flag — this is a UI interaction event.
-   CJA: checkout_click / view_cart = checkout button CTR.
-   AJO: "clicked checkout but didn't complete" journey trigger.
+   pushCheckoutClickEvent — fires when "Proceed to Checkout" is clicked.
+   UI interaction event — no commerce flag.
+   CJA: checkout_click ÷ view_cart = checkout button CTR.
+   Called by Cart.js on button click.
    ───────────────────────────────────────────────────────────── */
-export const pushCheckoutClickEvent = () => {
+export const pushCheckoutClickEvent = async () => {
+  const ecid = await getECID();
+
   const push = {
     event:     EVENT_NAMES.CHECKOUT_CLICK,
     eventType: EVENT_TYPES.CHECKOUT_CLICK,
@@ -967,6 +890,7 @@ export const pushCheckoutClickEvent = () => {
       page:    buildPageContext("cart", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -978,34 +902,26 @@ export const pushCheckoutClickEvent = () => {
   console.log(
     "%c🖱️  checkout_click",
     "color:#64748B;font-weight:bold;",
-    "\n  web →", push.web
+    "\n  ecid →", ecid,
+    "\n  web  →", push.web
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushPurchaseEvent
-   eventType : commerce.purchases
-   Called by : Checkout.js BEFORE dispatch(clearCart())
-
-   ⚠️  CRITICAL ORDER: Must fire BEFORE Redux clears the cart.
-   Once clearCart() runs, cartItems is empty and we lose the
-   product data. Checkout.js already does this correctly.
-
-   commerce.order.purchaseID:
-   - AEP deduplication: same purchaseID = don't double-ingest
-   - AJO entry: "purchase event with purchaseID → post-purchase journey"
-   - CJA: order-level revenue and item metrics
-
-   productListItems = everything purchased.
-   CJA expands this array into one row per product.
+   pushPurchaseEvent — fires when "Place Order" is clicked.
+   ⚠️  Must fire BEFORE dispatch(clearCart()) — cart is empty after.
+   Sends purchaseID (UUID) for AEP deduplication.
+   productListItems = everything purchased — CJA expands per product.
+   Called by Checkout.js handlePayment().
    ───────────────────────────────────────────────────────────── */
-export const pushPurchaseEvent = ({ cart, orderId }) => {
+export const pushPurchaseEvent = async ({ cart, orderId }) => {
   if (!cart?.cartItems) {
     console.warn("[ACDL] pushPurchaseEvent: cartItems missing — push skipped");
     return;
   }
 
+  const ecid = await getECID();
   const { normalizedItems, productListItems } = buildCartData(cart.cartItems);
   const totalValue = sumVal(normalizedItems);
 
@@ -1048,6 +964,7 @@ export const pushPurchaseEvent = ({ cart, orderId }) => {
       page:    buildPageContext("checkout", "commerce"),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -1062,41 +979,33 @@ export const pushPurchaseEvent = ({ cart, orderId }) => {
     `| orderId: ${orderId} | revenue: $${totalValue}`,
     "\n  commerce         →", push.commerce,
     "\n  productListItems →", productListItems,
+    "\n  ecid             →", ecid,
     "\n  identity         →", push.identityMap
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushLoginEvent
-   eventType : userAccount.login
-   Called by : Login.js after login() succeeds
-
-   ⚠️  MOST IMPORTANT PUSH FOR RTCDP IDENTITY STITCHING:
-   This push carries identityMap.Email with authenticatedState
-   "authenticated". When AEP Edge receives this:
-   1. Reads ECID from Web SDK's identity cookie
-   2. Reads Email from this push's identityMap
-   3. Tells RTCDP: these two identities = same person
-   4. RTCDP merges anonymous profile (ECID) + known profile (Email)
-   5. All pre-login events attributed to the known profile
-   6. AJO finds profile by email → enrolls in journeys
-
-   Without this push, RTCDP identity stitching does NOT happen.
+   pushLoginEvent — fires after successful email login.
+   ⚠️  Most critical push for RTCDP identity stitching.
+   identityMap.Email with authenticatedState "authenticated"
+   tells AEP Edge to link this ECID to this Email in the
+   identity graph — merging anonymous + known profiles into one.
+   Called by Login.js after login() succeeds.
    ───────────────────────────────────────────────────────────── */
-export const pushLoginEvent = (email) => {
+export const pushLoginEvent = async (email) => {
   if (!email) {
     console.warn("[ACDL] pushLoginEvent: email missing — push skipped");
     return;
   }
 
+  const ecid = await getECID();
   const meta = getUserMeta();
 
   const push = {
     event:     EVENT_NAMES.LOGIN,
     eventType: EVENT_TYPES.LOGIN,
 
-    /* The identity stitch push — "authenticated" triggers RTCDP merge */
     identityMap: buildIdentityMap(email, "authenticated"),
 
     web: {
@@ -1118,6 +1027,7 @@ export const pushLoginEvent = (email) => {
         sessionCount:  meta.sessionCount,
       },
       session: buildSessionContext(),
+      ecid,
     },
 
     timestamp: getTimestamp(),
@@ -1130,45 +1040,36 @@ export const pushLoginEvent = (email) => {
     "color:#10B981;font-weight:bold;",
     `| ${email}`,
     "\n  identityMap →", push.identityMap,
+    "\n  ecid        →", ecid,
     "\n  user        →", push._aepsupport.user
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushLogoutEvent
-   eventType : userAccount.logout
-   Called by : AuthContext.js in logout()
-
-   identityMap is empty on logout — no identity to assert.
-   ECID persists in the browser (Web SDK manages it) so future
-   anonymous sessions can still be linked to this profile when
-   the user logs in again.
+   pushLogoutEvent — fires when user clicks Logout in Navbar.
+   Derives page context dynamically from window.location.pathname
+   so CJA can report which page users log out from most.
+   identityMap is empty — no identity to assert after logout.
+   Called by AuthContext.js logout() BEFORE clearing localStorage.
    ───────────────────────────────────────────────────────────── */
-export const pushLogoutEvent = () => {
+export const pushLogoutEvent = async () => {
+  const ecid     = await getECID();
   const meta     = getUserMeta();
   const pathname = window.location.pathname;
 
-  /*
-    Derive page context from the ACTUAL current page.
-    Logout can be triggered from any page via the Navbar —
-    hardcoding "Logout" / "home" would misreport the exit page.
-    CJA uses this to answer: "From which page do users log out most?"
-  */
   const currentMeta = PAGE_META[pathname] || {
     pageType:     "product_detail",
     pageCategory: "commerce",
   };
 
-  /* Derive a readable page name from the pathname */
   const currentPageName = (() => {
-    if (pathname === "/")            return "Home";
-    if (pathname === "/products")    return "Products";
-    if (pathname === "/cart")        return "Cart";
-    if (pathname === "/checkout")    return "Checkout";
+    if (pathname === "/")             return "Home";
+    if (pathname === "/products")     return "Products";
+    if (pathname === "/cart")         return "Cart";
+    if (pathname === "/checkout")     return "Checkout";
     if (pathname === "/confirmation") return "Order Confirmation";
-    if (pathname === "/login")       return "Login";
-    /* product detail: /product/3-mens-cotton-jacket → "Product Detail" */
+    if (pathname === "/login")        return "Login";
     if (pathname.startsWith("/product/")) return "Product Detail";
     return pathname.replace(/^\//, "").replace(/-/g, " ");
   })();
@@ -1198,6 +1099,7 @@ export const pushLogoutEvent = () => {
         sessionCount:  meta.sessionCount,
       },
       session: buildSessionContext(),
+      ecid,
     },
 
     cart: {
@@ -1216,6 +1118,7 @@ export const pushLogoutEvent = () => {
     "%c🔓 logout",
     "color:#EF4444;font-weight:bold;",
     `| from: ${currentPageName} (${pathname})`,
+    "\n  ecid        →", ecid,
     "\n  identityMap →", push.identityMap,
     "\n  user        →", push._aepsupport.user
   );
@@ -1223,17 +1126,14 @@ export const pushLogoutEvent = () => {
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushFeedbackSubmittedEvent
-   eventType : web.formFilledOut
-   Called by : OrderConfirmation.js on feedback submit
-
-   _aepsupport.feedback fields are custom dimensions in CJA.
-   Use them to correlate satisfaction scores with:
-   - purchase value (high spenders satisfied?)
-   - product category (which categories delight customers?)
-   - acquisition source (which UTM campaigns bring happy users?)
+   pushFeedbackSubmittedEvent — fires when order confirmation feedback is submitted.
+   Captures star rating and feedback character count.
+   CJA: correlate satisfaction scores with order value, category, UTM source.
+   Called by OrderConfirmation.js on form submit.
    ───────────────────────────────────────────────────────────── */
-export const pushFeedbackSubmittedEvent = ({ rating, feedbackLength }) => {
+export const pushFeedbackSubmittedEvent = async ({ rating, feedbackLength }) => {
+  const ecid = await getECID();
+
   const push = {
     event:     EVENT_NAMES.FEEDBACK_SUBMITTED,
     eventType: EVENT_TYPES.FEEDBACK_SUBMITTED,
@@ -1258,6 +1158,7 @@ export const pushFeedbackSubmittedEvent = ({ rating, feedbackLength }) => {
       },
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -1270,21 +1171,20 @@ export const pushFeedbackSubmittedEvent = ({ rating, feedbackLength }) => {
     "%c📝 feedback_submitted",
     "color:#8B5CF6;font-weight:bold;",
     `| rating: ${rating} | length: ${feedbackLength}`,
+    "\n  ecid     →", ecid,
     "\n  feedback →", push._aepsupport.feedback
   );
 };
 
 
 /* ─────────────────────────────────────────────────────────────
-   pushExitIntentEvent
-   eventType : web.webInteraction.linkClicks
-   Called by : Home.js on exit intent trigger (mouseleave)
-
-   AJO use case:
-   "Exit intent fired on home → 5 min wait →
-    no purchase in session → send re-engagement notification"
+   pushExitIntentEvent — fires when user moves mouse toward browser chrome on Home page.
+   AJO use case: exit intent → no purchase in session → send re-engagement push.
+   Called by Home.js on mouseleave with upward velocity.
    ───────────────────────────────────────────────────────────── */
-export const pushExitIntentEvent = () => {
+export const pushExitIntentEvent = async () => {
+  const ecid = await getECID();
+
   const push = {
     event:     EVENT_NAMES.EXIT_INTENT,
     eventType: EVENT_TYPES.EXIT_INTENT,
@@ -1305,6 +1205,7 @@ export const pushExitIntentEvent = () => {
       page:    buildPageContext("home", "acquisition"),
       user:    buildUserContext(),
       session: buildSessionContext(),
+      ecid,
     },
 
     identityMap: getCurrentIdentityMap(),
@@ -1316,6 +1217,7 @@ export const pushExitIntentEvent = () => {
   console.log(
     "%c🚪 exit_intent",
     "color:#F59E0B;font-weight:bold;",
+    "\n  ecid    →", ecid,
     "\n  session →", push._aepsupport.session
   );
 };
