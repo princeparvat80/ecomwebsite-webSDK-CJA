@@ -439,9 +439,6 @@ export const getECID = async () => {
   try {
     const result = await window.alloy("getIdentity", { namespaces: ["ECID"] });
 
-    /* Temporary debug — remove after confirming ECID value */
-    console.log("[ACDL] getIdentity raw result →", JSON.stringify(result));
-
     /*
       alloy("getIdentity") returns: { identity: { ECID: "12345..." } }
       ECID is a plain string — NOT an array. Handle both shapes defensively.
