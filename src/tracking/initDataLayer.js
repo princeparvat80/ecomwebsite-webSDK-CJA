@@ -402,17 +402,46 @@ const sumVal = (items) =>
    Used to populate _aepsupport.ecid as a plain string field
    so CJA can use ECID as a reportable dimension (identityMap
    is a complex type that CJA cannot surface as a dimension).
+
+   WHY THE WAIT:
+   Launch loads async — window.alloy does not exist at the moment
+   React mounts and fires the first page_view. Without waiting,
+   the getIdentity call throws and returns null every time.
+   We poll up to 4 seconds for window.alloy to become a function,
+   then make the call. After the first successful read the ECID
+   is cached, so every subsequent push resolves instantly.
    ============================================================ */
 
 let cachedECID = null;
 
+const waitForAlloy = (maxWaitMs = 4000) =>
+  new Promise((resolve) => {
+    if (typeof window.alloy === "function") return resolve(true);
+    const start    = Date.now();
+    const interval = setInterval(() => {
+      if (typeof window.alloy === "function") {
+        clearInterval(interval);
+        resolve(true);
+      } else if (Date.now() - start >= maxWaitMs) {
+        clearInterval(interval);
+        resolve(false);
+      }
+    }, 100);
+  });
+
 export const getECID = async () => {
   if (cachedECID) return cachedECID;
+  const ready = await waitForAlloy();
+  if (!ready) {
+    console.warn("[ACDL] getECID: alloy not available after 4s — ECID skipped");
+    return null;
+  }
   try {
     const result = await window.alloy("getIdentity", { namespaces: ["ECID"] });
     cachedECID = result?.identity?.ECID?.[0]?.id || null;
     return cachedECID;
-  } catch {
+  } catch (e) {
+    console.warn("[ACDL] getECID: getIdentity failed —", e?.message);
     return null;
   }
 };
