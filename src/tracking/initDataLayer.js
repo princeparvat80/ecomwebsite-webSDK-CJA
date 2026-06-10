@@ -438,7 +438,19 @@ export const getECID = async () => {
   }
   try {
     const result = await window.alloy("getIdentity", { namespaces: ["ECID"] });
-    cachedECID = result?.identity?.ECID?.[0]?.id || null;
+
+    /* Temporary debug — remove after confirming ECID value */
+    console.log("[ACDL] getIdentity raw result →", JSON.stringify(result));
+
+    /*
+      alloy("getIdentity") returns: { identity: { ECID: "12345..." } }
+      ECID is a plain string — NOT an array. Handle both shapes defensively.
+    */
+    const ecidValue = result?.identity?.ECID;
+    cachedECID = typeof ecidValue === "string"
+      ? ecidValue
+      : ecidValue?.[0]?.id || null;
+
     return cachedECID;
   } catch (e) {
     console.warn("[ACDL] getECID: getIdentity failed —", e?.message);
