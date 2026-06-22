@@ -165,6 +165,9 @@ const Product = () => {
                     className="product-image"
                     loading="lazy"
                   />
+                  <div className="product-card-overlay">
+                    <span>Quick View</span>
+                  </div>
                 </div>
 
                 {/* Body */}

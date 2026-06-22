@@ -32,6 +32,7 @@ const App = () => {
         }}
       />
       <PageTracker />
+      <main className="page-wrapper">
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/products" element={<Product />} />
@@ -41,6 +42,7 @@ const App = () => {
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/confirmation" element={<OrderConfirmation />} />
       </Routes>
+      </main>
     </Router>
   );
 };

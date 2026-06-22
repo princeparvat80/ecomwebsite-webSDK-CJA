@@ -37,6 +37,24 @@ const OrderConfirmation = () => {
   return (
     <div className="confirmation-container">
 
+      {/* PROGRESS STEPS */}
+      <div className="checkout-steps" style={{ marginBottom: "40px" }}>
+        <div className="checkout-step completed">
+          <div className="step-dot">✓</div>
+          <span>Cart</span>
+        </div>
+        <div className="checkout-step-line completed" />
+        <div className="checkout-step completed">
+          <div className="step-dot">✓</div>
+          <span>Checkout</span>
+        </div>
+        <div className="checkout-step-line completed" />
+        <div className="checkout-step active">
+          <div className="step-dot">3</div>
+          <span>Confirm</span>
+        </div>
+      </div>
+
       {/* SUCCESS ICON */}
       <div className="confirmation-icon">✓</div>
 

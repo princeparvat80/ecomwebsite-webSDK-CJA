@@ -71,6 +71,24 @@ const Checkout = () => {
   return (
     <div className="checkout-container">
 
+      {/* PROGRESS STEPS */}
+      <div className="checkout-steps">
+        <div className="checkout-step completed">
+          <div className="step-dot">✓</div>
+          <span>Cart</span>
+        </div>
+        <div className="checkout-step-line completed" />
+        <div className="checkout-step active">
+          <div className="step-dot">2</div>
+          <span>Checkout</span>
+        </div>
+        <div className="checkout-step-line" />
+        <div className="checkout-step">
+          <div className="step-dot">3</div>
+          <span>Confirm</span>
+        </div>
+      </div>
+
       {/* HEADER */}
       <h1 className="checkout-title">Checkout</h1>
       <p className="checkout-subtitle">
