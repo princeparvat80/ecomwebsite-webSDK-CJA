@@ -6,11 +6,18 @@ import axios                                    from "axios";
 import { toast }                                from "react-toastify";
 import { pushViewItemEvent, pushAddToCartEvent } from "../tracking/initDataLayer";
 
-const renderStars = (rating) => {
-  if (!rating) return "☆☆☆☆☆";
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.5;
-  return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(5 - full - (half ? 1 : 0));
+const StarRating = ({ rating }) => {
+  const r     = rating || 0;
+  const full  = Math.floor(r);
+  const half  = r - full >= 0.5;
+  const empty = 5 - full - (half ? 1 : 0);
+  return (
+    <span className="stars-display">
+      {Array.from({ length: full  }).map((_, i) => <span key={"f" + i} className="star filled">&#9733;</span>)}
+      {half  && <span className="star half">&#9733;</span>}
+      {Array.from({ length: empty }).map((_, i) => <span key={"e" + i} className="star">&#9734;</span>)}
+    </span>
+  );
 };
 
 const ProductDetail = () => {
@@ -185,10 +192,8 @@ const ProductDetail = () => {
 
           {product.rating && (
             <div className="product-rating-row">
-              <span style={{ color: "var(--warning)", fontSize: "18px", letterSpacing: "-1px" }}>
-                {renderStars(product.rating.rate)}
-              </span>
-              <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--charcoal)" }}>
+              <StarRating rating={product.rating.rate} />
+              <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--slate)" }}>
                 {product.rating.rate} / 5
               </span>
               <span style={{ fontSize: "13px", color: "var(--muted)" }}>

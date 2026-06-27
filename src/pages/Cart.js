@@ -224,7 +224,7 @@ const Cart = () => {
               borderRadius: "var(--radius-md)",
               padding:      "14px 18px",
               fontSize:     "13.5px",
-              color:        "var(--charcoal)",
+              color:        "var(--slate)",
               display:      "flex",
               alignItems:   "center",
               gap:          "10px",

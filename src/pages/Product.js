@@ -9,10 +9,17 @@ import { pushAddToCartEvent }             from "../tracking/initDataLayer";
 
 const CATEGORIES = ["All", "electronics", "jewelery", "men's clothing", "women's clothing"];
 
-const renderStars = (rating) => {
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.5;
-  return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(5 - full - (half ? 1 : 0));
+const StarRating = ({ rating }) => {
+  const full  = Math.floor(rating);
+  const half  = rating - full >= 0.5;
+  const empty = 5 - full - (half ? 1 : 0);
+  return (
+    <span className="stars-display">
+      {Array.from({ length: full  }).map((_, i) => <span key={"f" + i} className="star filled">&#9733;</span>)}
+      {half  && <span className="star half">&#9733;</span>}
+      {Array.from({ length: empty }).map((_, i) => <span key={"e" + i} className="star">&#9734;</span>)}
+    </span>
+  );
 };
 
 const SkeletonCard = () => (
@@ -177,9 +184,8 @@ const Product = () => {
 
                   {product.rating && (
                     <div className="product-rating">
-                      <span className="stars">{renderStars(product.rating.rate)}</span>
-                      <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--charcoal)" }}>
-                        {product.rating.rate}
+                      <StarRating rating={product.rating.rate} />
+                      <span className="rating-num">{product.rating.rate}
                       </span>
                       <span className="rating-count">({product.rating.count})</span>
                     </div>

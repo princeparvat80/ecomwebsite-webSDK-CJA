@@ -140,7 +140,7 @@ const OrderConfirmation = () => {
                 style={{
                   fontSize:     "14px",
                   fontWeight:   "700",
-                  color:        "var(--charcoal)",
+                  color:        "var(--slate)",
                   marginBottom: "2px",
                 }}
               >
@@ -268,7 +268,7 @@ const OrderConfirmation = () => {
       >
         <span>📡</span>
         <span>
-          <strong style={{ color: "var(--charcoal)" }}>ACDL events on this page:</strong>&nbsp;
+          <strong style={{ color: "var(--slate)" }}>ACDL events on this page:</strong>&nbsp;
           <code style={{ fontSize: "11px" }}>purchase</code> pushed at checkout ·&nbsp;
           <code style={{ fontSize: "11px" }}>feedback_submitted</code> pushed on submit
           with <code style={{ fontSize: "11px" }}>_aepsupport.feedback.rating</code>

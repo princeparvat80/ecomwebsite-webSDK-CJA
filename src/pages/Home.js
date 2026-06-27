@@ -82,7 +82,7 @@ const Home = () => {
         data-ajo-zone="hero_banner"
         aria-label="AJO Hero Banner Zone"
       >
-        <p style={{ padding: "16px 20px", fontSize: "15px", color: "var(--charcoal)", fontWeight: "500" }}>
+        <p style={{ padding: "16px 20px", fontSize: "15px", color: "var(--slate)", fontWeight: "500" }}>
           🎯 <strong>AJO Hero Banner</strong> — Reserved for Adobe Journey Optimizer personalized messages.
         </p>
       </div>
@@ -258,7 +258,7 @@ const Home = () => {
               padding:      "14px 18px",
               marginBottom: "24px",
               fontSize:     "13px",
-              color:        "var(--charcoal)",
+              color:        "var(--slate)",
               textAlign:    "left",
             }}
           >

@@ -214,7 +214,7 @@ const Login = () => {
               lineHeight:   "1.6",
             }}
           >
-            <strong style={{ color: "var(--charcoal)" }}>📡 AEP Identity:</strong>
+            <strong style={{ color: "var(--slate)" }}>📡 AEP Identity:</strong>
             &nbsp;Signing in pushes a{" "}
             <code
               style={{

@@ -246,7 +246,7 @@ const Checkout = () => {
           >
             <span>📡</span>
             <span>
-              <strong style={{ color: "var(--charcoal)" }}>ACDL events:</strong>&nbsp;
+              <strong style={{ color: "var(--slate)" }}>ACDL events:</strong>&nbsp;
               <code style={{ fontSize: "11px" }}>begin_checkout</code> pushed on load ·&nbsp;
               <code style={{ fontSize: "11px" }}>purchase</code> pushed on "Place Order" with UUID orderId
             </span>
