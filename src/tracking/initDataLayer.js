@@ -288,15 +288,61 @@ const getAuthState = () => {
   ECID is intentionally NOT set here — Web SDK manages it automatically.
   Setting ECID here would conflict with Web SDK's identity cookie management.
   authenticatedState: "authenticated" is what triggers RTCDP identity stitching.
+
+  WHY Email is primary:false (use-case decision):
+  - We follow the DEVICE-FIRST strategy → ECID stays the primary identity on
+    every event. ECID is present on 100% of hits (even anonymous), so it is the
+    safe anchor for edge/real-time lookups and never risks record rejection.
+  - PERSON-FIRST alternative (Email primary:true on login) is also valid — used
+    when a CRM/login ID is the enterprise master person identity.
+  - Either way stitching, profile unification, CJA (person = Email) and AJO are
+    IDENTICAL — the `primary` flag only sets each event record's anchor, it does
+    NOT drive graph stitching or reporting.
+
+  WHY device-first is SAFER for Target / Edge personalization:
+  - Edge personalization (Adobe Target, AJO web/in-app, Edge Segmentation) runs
+    synchronously at request time and resolves the profile from the INCOMING
+    event's PRIMARY identity. ECID is present on EVERY hit — including the very
+    first anonymous visit — so ECID-primary means the edge can ALWAYS look up
+    and personalize, even for brand-new, not-logged-in users (the majority of
+    first-touch traffic).
+  - If Email were primary, the edge could only resolve post-login; anonymous
+    visitors would have no primary to key on → personalization gaps + higher
+    risk of missed/blank decisions on the first, most important page view.
 */
 const buildIdentityMap = (email, authenticatedState = "ambiguous") => {
   if (!email) return {};
+
+  /* ──────────────────────────────────────────────────────────────────
+     PERSON-FIRST TOGGLE  (currently OFF)
+     If the business later decides the login/Email/CRM ID must be the PRIMARY
+     identity AFTER login, just UNCOMMENT the block below and delete the
+     device-first return that follows — this will "do the magic":
+       • On login -> Email becomes primary (person-first).
+       • Anonymous hits stay ECID-primary automatically (no email yet).
+     IMPORTANT: also configure the datastream / Web SDK so ECID is NOT
+     forced primary,
+     >>>>>>>>>>>>>>>>>>>>----otherwise two primaries conflict on the same event.------------------<<<<<<<<<<
+
+     const isAuth = authenticatedState === "authenticated";
+     return {
+       Email: [
+         {
+           id:                 email,
+           authenticatedState: authenticatedState,
+           primary:            isAuth,   // person-first: Email primary once authenticated
+         },
+       ],
+     };
+  ────────────────────────────────────────────────────────────────────── */
+
+  // DEVICE-FIRST (active): ECID (auto, by Web SDK) remains primary
   return {
     Email: [
       {
         id:                 email,
         authenticatedState: authenticatedState,
-        primary:            false,
+        primary:            false,   // device-first: ECID stays primary
       },
     ],
   };
