@@ -338,4 +338,60 @@ Android `EdgeTutorialAppFinal` (Adobe Edge SDK sample) converted to replicate th
 
 ---
 
+## 19. PROGRESS UPDATE — work completed AFTER this handoff was written
+
+> Sections 1–18 above capture the state at the time of the original handoff and are left **unchanged on purpose**. This section records the work done *since* then. Where an earlier section says "planned" or "not yet started" (notably §11 AJO, and the browser simulator in §4/§13), **this section is the source of truth.** All IDs below were verified against the live `princeparvat-prod` sandbox.
+
+### 19.1 AJO — first journey BUILT & DEPLOYED  *(supersedes §11 "not yet started")*
+
+The **Cart Abandonment** journey was built and deployed on **2026-09-17** (created 21:15 UTC, deployed 21:28 UTC by Prince Kumar Parwat). It is live and fires end-to-end.
+
+| Item | Value |
+|---|---|
+| Journey name (in UI) | `Journey` (this is the Cart Abandoners journey; name was left generic) |
+| Journey ID | `7cf8a6a4-5e9a-49bd-b507-f30acc99a781` |
+| Version ID | `95bc3d0e-d69b-45e3-9348-1360ab1e62bb` (v1.0) |
+| Type | **Segment Qualification** (unitary; trigger category = qualification) |
+| Key namespace | `Email` |
+| Merge policy | `fd629cfe-…` (Default Timebased) |
+| Timezone | Asia/Calcutta |
+| Reentrance | `reentrance` (re-enters on the latest published version) |
+
+**Flow (3 steps):**
+1. **Start — Audience qualification entry.** Behavior = *enters* `SEG | Cart Abandoners (24h)` (`4620bef7-a857-4272-8215-929c42fe4b84`), qualification verb `realized`, namespace **Email**.
+2. **Action — `PrinceCartAbandonWebhook`** (action id `6512dff5-034c-4622-974d-dd7c00b10088`). A reusable **Custom HTTP action** (POST, JSON body) whose payload maps journey/profile fields:
+   - `email` ← `personalEmail.address`
+   - `firstName` ← `person.name.firstName`
+   - `message` ← constant string
+   The URL is a `webhook.site` endpoint — a **placeholder/proof** standing in for the real Email channel action (email needs channel + sender setup).
+3. **End.**
+
+**Reusable patterns learned:**
+- A **Custom Action** is defined once under **Admin Controls → Actions** and reused across journeys. Payload fields live under **Payloads → Request**; dynamic fields must be type **Variable** (named, then mapped in the journey), not **Constant**.
+- The journey must be **Published** to fire. An audience-qualification entry only triggers on a **new** enter — profiles already sitting in the segment are not (re)entered.
+
+**Known gap (also flagged by the platform's own journey audit):** the journey has **no exit criteria**, so converted profiles are not removed. Intentional for this v1 webhook proof. Planned v2: add a **Wait**, an **exit on `commerce.purchases`**, and swap the webhook for a real **Email channel** action. *(Browse-abandonment and post-purchase journeys remain planned — only this one journey exists so far.)*
+
+### 19.2 Streaming simulator RE-ARCHITECTED to direct Edge ingestion  *(updates §4 "Repo B" and §13)*
+
+§4/§13 describe the **Playwright/msedge browser** simulator as the primary feed. That approach repeatedly starved the commerce segments because **`fakestoreapi.com` is unreachable from GitHub Actions runners**, so the site never fired `commerce.productViews` in CI (login worked; the product page silently no-op'd).
+
+**New primary (commit `be72ab8`, 2026-09-27): `stream-sim/simulate_edge_api.js`** — posts XDM ExperienceEvents **straight to the Edge Network, no browser:**
+- `POST https://edge.adobedc.net/ee/v2/interact?dataStreamId=9f7d0c0f-…&requestId=<uuid>`, body `{ event: { xdm: { … } } }`, **unauthenticated** (same as the web beacon) — globally reachable and deterministic.
+- Reads products from the **local** `data/product_catalog_lookup.csv` (no external dependency).
+- One fresh device ECID per email (device-first: ECID primary, Email secondary); same funnel + probabilities as before (pageView → login → 1–3 `commerce.productViews` → 70% `productListAdds` → 50% `checkouts` → 20% `purchases`).
+- **Validated end-to-end (2026-09-27):** CI run all HTTP 200, no fakestoreapi errors; events reached the UPS profile store; **both streaming** (Product Browsers, Cart Abandoners) **and edge** (Product Viewer Edge `435c1ff4-…`) segments went `realized` from the server-side events — confirming **edge segmentation works via server-side `/interact`**, and the self-supplied ECID is accepted and stitched to Email.
+- `streaming-sim.yml` now runs this script (Playwright/msedge steps removed). The old `simulate_journeys.js` is kept as a backup but is **no longer used by cron**. The `SIM_EMAILS="a@x,b@x"` override and the `SIM_ENABLED=false` kill-switch still apply.
+
+### 19.3 New streaming segments  *(fills in the IDs left blank in §9)*
+
+| Name | ID | Method | Rule | Notes |
+|---|---|---|---|---|
+| SEG \| Product Browsers (24h) | `9a661abf-9bc4-404a-bab7-7431a2f9ead9` | Streaming | `commerce.productViews` in last 24h | Built for AJO browse retargeting; published & populating |
+| SEG \| VIP Browsers (24h) | `14143bcd-6665-4174-bcc3-2c74400cc524` | Streaming | `_aepsupport.loyaltyTier` in [Gold, Platinum] AND `commerce.productViews` last 24h | Real-time VIP offer; published & populating |
+
+Both use merge policy `fd629cfe-…` and are streaming (`continuous.enabled = true`).
+
+---
+
 *End of handoff. Claude Chat: acknowledge you have the full context, then ask the user which stage they want to start with (recommended: AJO Cart Abandonment journey), and guide step-by-step.*
