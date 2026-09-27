@@ -1,5 +1,5 @@
 import React, { useState, useEffect }    from "react";
-import { Link }                           from "react-router-dom";
+import { Link, useLocation }              from "react-router-dom";
 import { useDispatch, useSelector }       from "react-redux";
 import { addToCart }                      from "../redux/cartSlice";
 import axios                              from "axios";
@@ -34,9 +34,17 @@ const SkeletonCard = () => (
 );
 
 const Product = () => {
+  const location = useLocation();
+  // Honor a category passed in from navigation (e.g. the homepage category
+  // tiles). Falls back to "All" for any direct visit.
+  const initialCategory =
+    location.state && CATEGORIES.includes(location.state.category)
+      ? location.state.category
+      : "All";
+
   const [products,        setProducts]        = useState([]);
   const [loading,         setLoading]         = useState(true);
-  const [activeCategory,  setActiveCategory]  = useState("All");
+  const [activeCategory,  setActiveCategory]  = useState(initialCategory);
 
   const dispatch = useDispatch();
   const cart     = useSelector((state) => state.cart);

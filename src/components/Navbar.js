@@ -42,7 +42,26 @@ const Navbar = () => {
     >
       {/* LOGO */}
       <div className="logo">
-        <Link to="/">Prince AEP Lab</Link>
+        <Link to="/" className="brand" aria-label="Prince Lab home">
+          <span className="brand-mark">
+            <svg width="34" height="34" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+              <defs>
+                <linearGradient id="brandGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#FF6B35" />
+                  <stop offset="1" stopColor="#E85520" />
+                </linearGradient>
+              </defs>
+              <rect width="40" height="40" rx="11" fill="url(#brandGrad)" />
+              <path d="M13 16.5h14l-1.25 12.1a2.2 2.2 0 0 1-2.19 1.98H16.44a2.2 2.2 0 0 1-2.19-1.98L13 16.5Z" fill="#fff" />
+              <path d="M16.3 17v-2.1a3.7 3.7 0 0 1 7.4 0V17" stroke="#FF6B35" strokeWidth="2.2" strokeLinecap="round" fill="none" />
+              <circle cx="20" cy="22" r="1.7" fill="#FF6B35" />
+            </svg>
+          </span>
+          <span className="brand-text">
+            <span className="brand-word">Prince <span className="accent">Lab</span></span>
+            <span className="brand-tag">eCommerce</span>
+          </span>
+        </Link>
       </div>
 
       {/* DESKTOP NAV */}
